@@ -77,8 +77,14 @@ fun VisualTimerCanvas(
                         change.position, size.width.toFloat(), size.height.toFloat(), state.clockwiseModeEnabled,
                     )
                     var setToZero = false
+                    var setToMax = false
                     if (prevAngle > 270f && newAngle < 90f) {
-                        dragLap = (dragLap + 1).coerceAtMost(1)
+                        if (dragLap < 1) {
+                            dragLap++
+                        } else {
+                            // Already at max lap — clamp instead of wrapping angle back to near-zero
+                            setToMax = true
+                        }
                     } else if (prevAngle < 90f && newAngle > 270f) {
                         if (dragLap > 0) {
                             dragLap--
@@ -86,8 +92,17 @@ fun VisualTimerCanvas(
                             setToZero = true
                         }
                     }
-                    prevAngle = newAngle
-                    onDurationSelected(if (setToZero) 0L else computeDragDuration(newAngle, dragLap))
+                    // Pin prevAngle to prevent crossing re-trigger on the next event
+                    prevAngle = when {
+                        setToZero -> 0f
+                        setToMax -> 359f
+                        else -> newAngle
+                    }
+                    onDurationSelected(when {
+                        setToZero -> 0L
+                        setToMax -> DRAG_MAX_MILLIS
+                        else -> computeDragDuration(newAngle, dragLap)
+                    })
                 },
             )
         },

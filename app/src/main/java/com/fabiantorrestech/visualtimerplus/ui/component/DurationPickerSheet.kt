@@ -1,18 +1,22 @@
 package com.fabiantorrestech.visualtimerplus.ui.component
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
@@ -55,7 +60,7 @@ fun DurationPickerSheet(
     onDurationSet: (Long) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -79,12 +84,13 @@ fun DurationPickerContent(
     onDurationSet: (Long) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     // Digit buffer: 6 chars = HHMMSS, right-to-left fill
     val initialSeconds = (initialMillis / 1000L).coerceAtLeast(0L)
     val initHH = (initialSeconds / 3600L).coerceAtMost(99L)
     val initMM = ((initialSeconds % 3600L) / 60L)
     val initSS = (initialSeconds % 60L)
-    val initStr = "%02d%02d%02d".format(initHH, initMM, initSS).trimStart('0').padStart(1, '0')
 
     var digits by remember {
         mutableStateOf(
@@ -112,104 +118,182 @@ fun DurationPickerContent(
         return mm < 60L && ss < 60L && currentMillis() > 0L
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = stringResource(R.string.set_duration),
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+    val digitRows = listOf(
+        listOf("1", "2", "3"),
+        listOf("4", "5", "6"),
+        listOf("7", "8", "9"),
+        listOf("00", "0", "⌫"),
+    )
 
-        Spacer(modifier = Modifier.height(24.dp))
+    fun onKey(key: String) {
+        when (key) {
+            "⌫" -> { if (digits.isNotEmpty()) digits = digits.dropLast(1) }
+            "00" -> { if (digits.length < 5) digits = (digits + "00").takeLast(6) }
+            else -> { if (digits.length < 6) digits = (digits + key).trimStart('0').ifEmpty { "0" } }
+        }
+    }
 
-        // Display row: HH : MM : SS
+    if (isLandscape) {
         Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxWidth(),
         ) {
-            DigitGroup(value = displayHH(), label = stringResource(R.string.picker_hours))
-            SeparatorText()
-            DigitGroup(value = displayMM(), label = stringResource(R.string.picker_minutes))
-            SeparatorText()
-            DigitGroup(value = displaySS(), label = stringResource(R.string.picker_seconds))
-        }
-
-        if (!isValid() && digits.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.picker_invalid),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Digit pad
-        val digitRows = listOf(
-            listOf("1", "2", "3"),
-            listOf("4", "5", "6"),
-            listOf("7", "8", "9"),
-            listOf("00", "0", "⌫"),
-        )
-        digitRows.forEach { row ->
-            Row(
+            // Left: title + time display
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    .weight(1f)
+                    .fillMaxHeight(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
             ) {
-                row.forEach { key ->
-                    DialButton(
-                        label = key,
-                        modifier = Modifier.weight(1f),
-                        onClick = {
-                            when (key) {
-                                "⌫" -> {
-                                    if (digits.isNotEmpty()) digits = digits.dropLast(1)
-                                }
-                                "00" -> {
-                                    if (digits.length < 5) digits = (digits + "00").takeLast(6)
-                                }
-                                else -> {
-                                    if (digits.length < 6) digits = (digits + key).trimStart('0').ifEmpty { "0" }
-                                }
-                            }
-                        },
+                Text(
+                    text = stringResource(R.string.set_duration),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    DigitGroup(value = displayHH(), label = stringResource(R.string.picker_hours))
+                    SeparatorText()
+                    DigitGroup(value = displayMM(), label = stringResource(R.string.picker_minutes))
+                    SeparatorText()
+                    DigitGroup(value = displaySS(), label = stringResource(R.string.picker_seconds))
+                }
+                if (!isValid() && digits.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.picker_invalid),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error,
                     )
                 }
             }
+
+            // Right: numpad + action buttons
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                digitRows.forEach { row ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 1.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        row.forEach { key ->
+                            DialButton(
+                                label = key,
+                                modifier = Modifier.weight(1f),
+                                buttonHeight = 44.dp,
+                                onClick = { onKey(key) },
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(24.dp),
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                    Button(
+                        onClick = { if (isValid()) onDurationSet(currentMillis()) },
+                        enabled = isValid(),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(24.dp),
+                    ) {
+                        Text(stringResource(R.string.set_duration_confirm))
+                    }
+                }
+            }
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+    } else {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            OutlinedButton(
-                onClick = onDismiss,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(24.dp),
+            Text(
+                text = stringResource(R.string.set_duration),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(stringResource(R.string.cancel))
+                DigitGroup(value = displayHH(), label = stringResource(R.string.picker_hours))
+                SeparatorText()
+                DigitGroup(value = displayMM(), label = stringResource(R.string.picker_minutes))
+                SeparatorText()
+                DigitGroup(value = displaySS(), label = stringResource(R.string.picker_seconds))
             }
-            Button(
-                onClick = { if (isValid()) onDurationSet(currentMillis()) },
-                enabled = isValid(),
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(24.dp),
+            if (!isValid() && digits.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.picker_invalid),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+            digitRows.forEach { row ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    row.forEach { key ->
+                        DialButton(
+                            label = key,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onKey(key) },
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(stringResource(R.string.set_duration_confirm))
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(24.dp),
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Button(
+                    onClick = { if (isValid()) onDurationSet(currentMillis()) },
+                    enabled = isValid(),
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(24.dp),
+                ) {
+                    Text(stringResource(R.string.set_duration_confirm))
+                }
             }
+            Spacer(modifier = Modifier.height(24.dp))
         }
-
-        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
@@ -258,10 +342,11 @@ private fun DialButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    buttonHeight: androidx.compose.ui.unit.Dp = 56.dp,
 ) {
     TextButton(
         onClick = onClick,
-        modifier = modifier.height(56.dp),
+        modifier = modifier.height(buttonHeight),
         shape = RoundedCornerShape(16.dp),
     ) {
         Text(

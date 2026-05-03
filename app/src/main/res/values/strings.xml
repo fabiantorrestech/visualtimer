@@ -119,5 +119,14 @@
     <!-- Preset actions -->
     <string name="preset_add_short">+ Add</string>
     <string name="preset_change_duration">Change duration</string>
+    <string name="preset_move_to_folder">Move to folder</string>
     <string name="preset_clear">Clear preset</string>
+
+    <!-- Per-preset settings sheet -->
+    <string name="preset_settings_title">Preset settings</string>
+    <string name="preset_settings_default">Default</string>
+    <string name="preset_settings_on">On</string>
+    <string name="preset_settings_off">Off</string>
+    <string name="preset_settings_display">Display</string>
+    <string name="preset_settings_volume_default">Volume: Default</string>
 </resources>

@@ -266,9 +266,11 @@ class TimerService : Service() {
                 FinishedSoundRoute.Media -> AudioManager.STREAM_MUSIC
                 else -> AudioManager.STREAM_NOTIFICATION
             }
-            if (state.overrideMutedSystemVolume && audioManager != null) {
+            if (audioManager != null) {
                 val maxVol = audioManager.getStreamMaxVolume(streamType)
-                val targetVol = (maxVol * state.finishedSoundVolumePercent / 100f).toInt().coerceAtLeast(1)
+                val rawVol = (maxVol * state.finishedSoundVolumePercent / 100f).toInt()
+                // overrideMutedSystemVolume ensures volume is ≥1 even when system is muted
+                val targetVol = if (state.overrideMutedSystemVolume) rawVol.coerceAtLeast(1) else rawVol
                 savedStreamVolume = audioManager.getStreamVolume(streamType)
                 savedStreamType = streamType
                 audioManager.setStreamVolume(streamType, targetVol, 0)

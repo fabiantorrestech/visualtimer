@@ -31,15 +31,15 @@ fun QuickAdjustRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            QuickAdjustChip(label = "-5", enabled = enabled) { onAdjust(-5 * MINUTE_MILLIS) }
+            QuickAdjustChip(label = "-30s", enabled = enabled) { onAdjust(-30 * SECOND_MILLIS) }
             QuickAdjustChip(label = "-1", enabled = enabled) { onAdjust(-1 * MINUTE_MILLIS) }
-            QuickAdjustChip(label = "-:30", enabled = enabled) { onAdjust(-30 * SECOND_MILLIS) }
+            QuickAdjustChip(label = "-5", enabled = enabled) { onAdjust(-5 * MINUTE_MILLIS) }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            QuickAdjustChip(label = "+:30", enabled = enabled) { onAdjust(30 * SECOND_MILLIS) }
+            QuickAdjustChip(label = "+30s", enabled = enabled) { onAdjust(30 * SECOND_MILLIS) }
             QuickAdjustChip(label = "+1", enabled = enabled) { onAdjust(1 * MINUTE_MILLIS) }
             QuickAdjustChip(label = "+5", enabled = enabled) { onAdjust(5 * MINUTE_MILLIS) }
         }
