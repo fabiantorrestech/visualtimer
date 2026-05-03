@@ -66,6 +66,7 @@ class TimerController(context: Context) {
                                 ?.let { clampDuration(it - System.currentTimeMillis()) }
                                 ?: state.remainingMillis
                             val updatedRemaining = clampDuration(currentRemaining + action.deltaMillis)
+                                .coerceAtMost(DRAG_MAX_MILLIS)
                             state.copy(
                                 selectedDurationMillis = updatedRemaining,
                                 remainingMillis = updatedRemaining,
@@ -77,7 +78,7 @@ class TimerController(context: Context) {
                         TimerStatus.Paused -> {
                             val updatedDuration = clampDuration(
                                 (state.pausedRemainingMillis ?: state.remainingMillis) + action.deltaMillis,
-                            )
+                            ).coerceAtMost(DRAG_MAX_MILLIS)
                             state.copy(
                                 selectedDurationMillis = updatedDuration,
                                 remainingMillis = updatedDuration,
@@ -90,6 +91,7 @@ class TimerController(context: Context) {
                         TimerStatus.Finished,
                         -> {
                             val updatedDuration = clampDuration(state.selectedDurationMillis + action.deltaMillis)
+                                .coerceAtMost(DRAG_MAX_MILLIS)
                             state.copy(
                                 status = TimerStatus.Idle,
                                 selectedDurationMillis = updatedDuration,

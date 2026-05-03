@@ -76,13 +76,18 @@ fun VisualTimerCanvas(
                     val newAngle = toDirectionalAngle(
                         change.position, size.width.toFloat(), size.height.toFloat(), state.clockwiseModeEnabled,
                     )
+                    var setToZero = false
                     if (prevAngle > 270f && newAngle < 90f) {
                         dragLap = (dragLap + 1).coerceAtMost(1)
                     } else if (prevAngle < 90f && newAngle > 270f) {
-                        dragLap = (dragLap - 1).coerceAtLeast(0)
+                        if (dragLap > 0) {
+                            dragLap--
+                        } else {
+                            setToZero = true
+                        }
                     }
                     prevAngle = newAngle
-                    onDurationSelected(computeDragDuration(newAngle, dragLap))
+                    onDurationSelected(if (setToZero) 0L else computeDragDuration(newAngle, dragLap))
                 },
             )
         },

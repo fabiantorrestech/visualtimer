@@ -1,6 +1,7 @@
 package com.fabiantorrestech.visualtimerplus.ui.component
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,16 +23,26 @@ fun QuickAdjustRow(
     enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        QuickAdjustChip(label = "-5", enabled = enabled) { onAdjust(-5 * MINUTE_MILLIS) }
-        QuickAdjustChip(label = "-1", enabled = enabled) { onAdjust(-1 * MINUTE_MILLIS) }
-        QuickAdjustChip(label = "-:30", enabled = enabled) { onAdjust(-30 * SECOND_MILLIS) }
-        QuickAdjustChip(label = "+:30", enabled = enabled) { onAdjust(30 * SECOND_MILLIS) }
-        QuickAdjustChip(label = "+1", enabled = enabled) { onAdjust(1 * MINUTE_MILLIS) }
-        QuickAdjustChip(label = "+5", enabled = enabled) { onAdjust(5 * MINUTE_MILLIS) }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            QuickAdjustChip(label = "-5", enabled = enabled) { onAdjust(-5 * MINUTE_MILLIS) }
+            QuickAdjustChip(label = "-1", enabled = enabled) { onAdjust(-1 * MINUTE_MILLIS) }
+            QuickAdjustChip(label = "-:30", enabled = enabled) { onAdjust(-30 * SECOND_MILLIS) }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            QuickAdjustChip(label = "+:30", enabled = enabled) { onAdjust(30 * SECOND_MILLIS) }
+            QuickAdjustChip(label = "+1", enabled = enabled) { onAdjust(1 * MINUTE_MILLIS) }
+            QuickAdjustChip(label = "+5", enabled = enabled) { onAdjust(5 * MINUTE_MILLIS) }
+        }
     }
 }
 

@@ -33,6 +33,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -214,6 +215,7 @@ fun TimerScreen(
     if (showSettingsSheet) {
         ModalBottomSheet(
             onDismissRequest = { showSettingsSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = MaterialTheme.colorScheme.background,
         ) {
             SettingsSheetContent(
@@ -265,6 +267,10 @@ fun TimerScreen(
                 onNameChipClick = {
                     if (state.status != TimerStatus.Running) showNameDialog = true
                 },
+                onClearPreset = {
+                    onAction(TimerAction.SetActivePresetId(null))
+                    onAction(TimerAction.SetActiveTimerName(""))
+                },
                 onStartWithPromptCheck = {
                     if (state.promptBeforeStart) showStartNamePrompt = true
                     else onAction(TimerAction.Start)
@@ -295,6 +301,10 @@ fun TimerScreen(
                 onOpenDurationPicker = { if (state.status == TimerStatus.Idle) showDurationPicker = true },
                 onNameChipClick = {
                     if (state.status != TimerStatus.Running) showNameDialog = true
+                },
+                onClearPreset = {
+                    onAction(TimerAction.SetActivePresetId(null))
+                    onAction(TimerAction.SetActiveTimerName(""))
                 },
                 onStartWithPromptCheck = {
                     if (state.promptBeforeStart) showStartNamePrompt = true
@@ -348,6 +358,7 @@ private fun PortraitLayout(
     onOpenPresets: () -> Unit,
     onOpenDurationPicker: () -> Unit,
     onNameChipClick: () -> Unit,
+    onClearPreset: () -> Unit,
     onStartWithPromptCheck: () -> Unit,
     onAdjust: (Long) -> Unit,
     awakenMinimalUi: () -> Unit,
@@ -357,6 +368,7 @@ private fun PortraitLayout(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -392,6 +404,7 @@ private fun PortraitLayout(
             isCleanModeActive = isCleanModeActive,
             minimalUiAlpha = minimalUiAlpha,
             onNameChipClick = onNameChipClick,
+            onClearPreset = onClearPreset,
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -452,7 +465,7 @@ private fun PortraitLayout(
             onClick = onOpenSettings,
             label = { Text(text = stringResource(R.string.settings)) },
             modifier = Modifier
-                .align(Alignment.End)
+                .align(Alignment.Start)
                 .alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
             shape = RoundedCornerShape(22.dp),
             colors = AssistChipDefaults.assistChipColors(
@@ -476,6 +489,7 @@ private fun LandscapeLayout(
     onOpenPresets: () -> Unit,
     onOpenDurationPicker: () -> Unit,
     onNameChipClick: () -> Unit,
+    onClearPreset: () -> Unit,
     onStartWithPromptCheck: () -> Unit,
     onAdjust: (Long) -> Unit,
     awakenMinimalUi: () -> Unit,
@@ -485,6 +499,7 @@ private fun LandscapeLayout(
     Row(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -536,6 +551,7 @@ private fun LandscapeLayout(
                 isCleanModeActive = isCleanModeActive,
                 minimalUiAlpha = minimalUiAlpha,
                 onNameChipClick = onNameChipClick,
+                onClearPreset = onClearPreset,
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -584,7 +600,7 @@ private fun LandscapeLayout(
                 onClick = onOpenSettings,
                 label = { Text(text = stringResource(R.string.settings)) },
                 modifier = Modifier
-                    .align(Alignment.End)
+                    .align(Alignment.Start)
                     .alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
                 shape = RoundedCornerShape(22.dp),
                 colors = AssistChipDefaults.assistChipColors(
@@ -615,7 +631,22 @@ private fun StatusAndLogRow(
             modifier = Modifier.weight(1f),
         )
 
-        // History icon — hidden in clean mode (invisible but not gone)
+        val isActive = state.status != TimerStatus.Idle && state.originalDurationMillis > 0L
+        val adjustedTotal = state.adjustedTotalMillis?.takeIf { isActive }
+        InfoBadge(
+            text = when {
+                adjustedTotal != null -> stringResource(R.string.duration_adjusted, adjustedTotal.formatClockTime())
+                isActive -> stringResource(R.string.duration_original, state.originalDurationMillis.formatClockTime())
+                else -> state.selectedDurationMillis.formatClockTime()
+            },
+            secondaryText = if (adjustedTotal != null) {
+                stringResource(R.string.duration_original, state.originalDurationMillis.formatClockTime())
+            } else null,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.End,
+        )
+
+        // History icon — rightmost; hidden in clean mode (invisible but not gone)
         Surface(
             onClick = onOpenLog,
             shape = CircleShape,
@@ -632,21 +663,6 @@ private fun StatusAndLogRow(
                 )
             }
         }
-
-        val isActive = state.status != TimerStatus.Idle && state.originalDurationMillis > 0L
-        val adjustedTotal = state.adjustedTotalMillis?.takeIf { isActive }
-        InfoBadge(
-            text = when {
-                adjustedTotal != null -> stringResource(R.string.duration_adjusted, adjustedTotal.formatClockTime())
-                isActive -> stringResource(R.string.duration_original, state.originalDurationMillis.formatClockTime())
-                else -> state.selectedDurationMillis.formatClockTime()
-            },
-            secondaryText = if (adjustedTotal != null) {
-                stringResource(R.string.duration_original, state.originalDurationMillis.formatClockTime())
-            } else null,
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.End,
-        )
     }
 }
 
@@ -656,51 +672,75 @@ private fun TimerNameChip(
     isCleanModeActive: Boolean,
     minimalUiAlpha: Float,
     onNameChipClick: () -> Unit,
+    onClearPreset: () -> Unit,
 ) {
-    Surface(
-        onClick = onNameChipClick,
-        enabled = state.status != TimerStatus.Running,
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Surface(
+            onClick = onNameChipClick,
+            enabled = state.status != TimerStatus.Running,
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
+            modifier = Modifier.weight(1f),
         ) {
-            val hasName = state.activeTimerName.isNotBlank()
-            Text(
-                text = if (hasName) state.activeTimerName else stringResource(R.string.name_placeholder),
-                style = MaterialTheme.typography.labelLarge,
-                color = if (hasName) MaterialTheme.colorScheme.onSurface
-                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                fontWeight = if (hasName) FontWeight.Medium else FontWeight.Normal,
-                modifier = Modifier.weight(1f),
-            )
-            if (state.isTimerNameAdjusted) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val hasName = state.activeTimerName.isNotBlank()
+                Text(
+                    text = if (hasName) state.activeTimerName else stringResource(R.string.name_placeholder),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (hasName) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    fontWeight = if (hasName) FontWeight.Medium else FontWeight.Normal,
+                    modifier = Modifier.weight(1f),
+                )
+                if (state.isTimerNameAdjusted) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.log_adjusted_badge),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+                if (state.status != TimerStatus.Running) {
                     Text(
-                        text = stringResource(R.string.log_adjusted_badge),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        fontWeight = FontWeight.SemiBold,
+                        text = "✎",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     )
                 }
             }
-            if (state.status != TimerStatus.Running) {
-                Text(
-                    text = "✎",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                )
+        }
+        // Clear preset association button — only visible when a preset is active
+        if (state.activePresetId != null) {
+            Surface(
+                onClick = onClearPreset,
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                modifier = Modifier.size(36.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "✕",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

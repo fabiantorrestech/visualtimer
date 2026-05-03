@@ -1,9 +1,6 @@
 package com.fabiantorrestech.visualtimerplus.ui.component
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,10 +18,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -33,29 +30,33 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.fabiantorrestech.visualtimerplus.R
-import com.fabiantorrestech.visualtimerplus.db.AppDao
 import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.db.PresetEntity
 import com.fabiantorrestech.visualtimerplus.db.PresetFolderEntity
 import com.fabiantorrestech.visualtimerplus.timer.TimerAction
-import com.fabiantorrestech.visualtimerplus.timer.clampDuration
 import com.fabiantorrestech.visualtimerplus.util.formatClockTime
 import kotlinx.coroutines.launch
 
@@ -67,7 +68,7 @@ fun PresetsSheet(
     onAction: (TimerAction) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val dao = db.appDao()
 
@@ -83,11 +84,37 @@ fun PresetsSheet(
     var showAddFolderDialog by remember { mutableStateOf(false) }
     var presetToRename by remember { mutableStateOf<PresetEntity?>(null) }
     var folderToRename by remember { mutableStateOf<PresetFolderEntity?>(null) }
+    var presetToChangeDuration by remember { mutableStateOf<PresetEntity?>(null) }
     var showDurationPicker by remember { mutableStateOf(false) }
     var pickerInitialMillis by remember { mutableStateOf(currentDurationMillis) }
     var pendingPresetName by remember { mutableStateOf("") }
     var pendingPresetFolder by remember { mutableStateOf<Long?>(null) }
     var pendingPresetMillis by remember { mutableStateOf(currentDurationMillis) }
+
+    // Drag-to-reorder state
+    val presetLists = remember { mutableStateMapOf<Long?, SnapshotStateList<PresetEntity>>() }
+    var draggedPresetId by remember { mutableStateOf<Long?>(null) }
+    var dragFolderId by remember { mutableStateOf<Long?>(null) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+
+    // Sync per-folder lists from DB when not dragging
+    LaunchedEffect(allPresets) {
+        if (draggedPresetId == null) {
+            val byFolder = allPresets.groupBy { it.folderId }
+            (folders.map { it.id as Long? } + listOf(null)).forEach { folderId ->
+                val items = byFolder[folderId] ?: emptyList()
+                val existing = presetLists[folderId]
+                if (existing == null) {
+                    presetLists[folderId] = items.toMutableStateList()
+                } else {
+                    existing.clear()
+                    existing.addAll(items)
+                }
+            }
+        }
+    }
+
+    val itemHeightPx = with(LocalDensity.current) { 65.dp.toPx() }
 
     if (showDurationPicker) {
         DurationPickerSheet(
@@ -101,6 +128,17 @@ fun PresetsSheet(
                 showDurationPicker = false
                 showAddPresetDialog = true
             },
+        )
+    }
+
+    presetToChangeDuration?.let { preset ->
+        DurationPickerSheet(
+            initialMillis = preset.durationMillis,
+            onDurationSet = { millis ->
+                scope.launch { dao.updatePreset(preset.copy(durationMillis = millis)) }
+                presetToChangeDuration = null
+            },
+            onDismiss = { presetToChangeDuration = null },
         )
     }
 
@@ -196,8 +234,16 @@ fun PresetsSheet(
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (!editMode) {
+                        TextButton(onClick = {
+                            pendingPresetMillis = currentDurationMillis
+                            pendingPresetName = ""
+                            pendingPresetFolder = null
+                            showAddPresetDialog = true
+                        }) {
+                            Text(stringResource(R.string.preset_add_short))
+                        }
                         TextButton(onClick = { showAddFolderDialog = true }) {
                             Text(stringResource(R.string.folder_add_short))
                         }
@@ -237,9 +283,8 @@ fun PresetsSheet(
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    // Folders + their presets
                     folders.forEach { folder ->
-                        val folderPresets = displayPresets.filter { it.folderId == folder.id }
+                        val folderPresets = presetLists[folder.id] ?: emptyList<PresetEntity>()
                         if (folderPresets.isNotEmpty() || editMode) {
                             item(key = "folder_${folder.id}") {
                                 FolderHeader(
@@ -255,9 +300,12 @@ fun PresetsSheet(
                                 )
                             }
                             items(folderPresets, key = { "preset_${it.id}" }) { preset ->
-                                PresetRow(
+                                val isDragged = preset.id == draggedPresetId
+                                PresetRowDraggable(
                                     preset = preset,
                                     editMode = editMode,
+                                    isDragged = isDragged,
+                                    dragOffsetY = if (isDragged) dragOffsetY else 0f,
                                     onSelect = {
                                         onAction(TimerAction.SetDurationExact(preset.durationMillis))
                                         onAction(TimerAction.SetActiveTimerName(preset.name))
@@ -265,14 +313,50 @@ fun PresetsSheet(
                                         onDismiss()
                                     },
                                     onRename = { presetToRename = preset },
+                                    onChangeDuration = { presetToChangeDuration = preset },
                                     onDelete = { scope.launch { dao.deletePreset(preset) } },
+                                    onDragStart = {
+                                        draggedPresetId = preset.id
+                                        dragFolderId = folder.id
+                                        dragOffsetY = 0f
+                                    },
+                                    onDrag = { delta ->
+                                        dragOffsetY += delta
+                                        val list = presetLists[dragFolderId]
+                                        val idx = list?.indexOfFirst { it.id == draggedPresetId } ?: -1
+                                        if (list != null && idx >= 0) {
+                                            when {
+                                                dragOffsetY > itemHeightPx / 2 && idx < list.size - 1 -> {
+                                                    list.add(idx + 1, list.removeAt(idx))
+                                                    dragOffsetY -= itemHeightPx
+                                                }
+                                                dragOffsetY < -itemHeightPx / 2 && idx > 0 -> {
+                                                    list.add(idx - 1, list.removeAt(idx))
+                                                    dragOffsetY += itemHeightPx
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        val fId = dragFolderId
+                                        val list = presetLists[fId]
+                                        if (list != null) {
+                                            scope.launch {
+                                                list.forEachIndexed { index, p ->
+                                                    dao.updatePreset(p.copy(sortOrder = index))
+                                                }
+                                            }
+                                        }
+                                        draggedPresetId = null
+                                        dragOffsetY = 0f
+                                    },
                                 )
                             }
                         }
                     }
 
                     // Uncategorized
-                    val uncategorized = displayPresets.filter { it.folderId == null }
+                    val uncategorized = presetLists[null] ?: emptyList<PresetEntity>()
                     if (uncategorized.isNotEmpty()) {
                         item(key = "folder_uncategorized") {
                             FolderHeader(
@@ -283,9 +367,12 @@ fun PresetsSheet(
                             )
                         }
                         items(uncategorized, key = { "preset_${it.id}" }) { preset ->
-                            PresetRow(
+                            val isDragged = preset.id == draggedPresetId
+                            PresetRowDraggable(
                                 preset = preset,
                                 editMode = editMode,
+                                isDragged = isDragged,
+                                dragOffsetY = if (isDragged) dragOffsetY else 0f,
                                 onSelect = {
                                     onAction(TimerAction.SetDurationExact(preset.durationMillis))
                                     onAction(TimerAction.SetActiveTimerName(preset.name))
@@ -293,31 +380,46 @@ fun PresetsSheet(
                                     onDismiss()
                                 },
                                 onRename = { presetToRename = preset },
+                                onChangeDuration = { presetToChangeDuration = preset },
                                 onDelete = { scope.launch { dao.deletePreset(preset) } },
+                                onDragStart = {
+                                    draggedPresetId = preset.id
+                                    dragFolderId = null
+                                    dragOffsetY = 0f
+                                },
+                                onDrag = { delta ->
+                                    dragOffsetY += delta
+                                    val list = presetLists[null]
+                                    val idx = list?.indexOfFirst { it.id == draggedPresetId } ?: -1
+                                    if (list != null && idx >= 0) {
+                                        when {
+                                            dragOffsetY > itemHeightPx / 2 && idx < list.size - 1 -> {
+                                                list.add(idx + 1, list.removeAt(idx))
+                                                dragOffsetY -= itemHeightPx
+                                            }
+                                            dragOffsetY < -itemHeightPx / 2 && idx > 0 -> {
+                                                list.add(idx - 1, list.removeAt(idx))
+                                                dragOffsetY += itemHeightPx
+                                            }
+                                        }
+                                    }
+                                },
+                                onDragEnd = {
+                                    val list = presetLists[null]
+                                    if (list != null) {
+                                        scope.launch {
+                                            list.forEachIndexed { index, p ->
+                                                dao.updatePreset(p.copy(sortOrder = index))
+                                            }
+                                        }
+                                    }
+                                    draggedPresetId = null
+                                    dragOffsetY = 0f
+                                },
                             )
                         }
                     }
                 }
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-            // Add preset button
-            TextButton(
-                onClick = {
-                    pendingPresetMillis = currentDurationMillis
-                    pendingPresetName = ""
-                    pendingPresetFolder = null
-                    showAddPresetDialog = true
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.preset_add),
-                    style = MaterialTheme.typography.labelLarge,
-                )
             }
         }
     }
@@ -371,17 +473,35 @@ private fun FolderHeader(
 }
 
 @Composable
-private fun PresetRow(
+private fun PresetRowDraggable(
     preset: PresetEntity,
     editMode: Boolean,
+    isDragged: Boolean,
+    dragOffsetY: Float,
     onSelect: () -> Unit,
     onRename: () -> Unit,
+    onChangeDuration: () -> Unit,
     onDelete: () -> Unit,
+    onDragStart: () -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit,
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Surface(
-        onClick = if (editMode) onRename else onSelect,
+        onClick = if (editMode) ({}) else onSelect,
         color = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .zIndex(if (isDragged) 1f else 0f)
+            .graphicsLayer {
+                translationY = dragOffsetY
+                if (isDragged) {
+                    shadowElevation = 8f
+                    scaleX = 1.02f
+                    scaleY = 1.02f
+                }
+            },
     ) {
         Row(
             modifier = Modifier
@@ -391,7 +511,31 @@ private fun PresetRow(
         ) {
             if (editMode) {
                 DeleteButton(onClick = onDelete)
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                // Drag handle
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .pointerInput(Unit) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { onDragStart() },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    onDrag(dragAmount.y)
+                                },
+                                onDragEnd = { onDragEnd() },
+                                onDragCancel = { onDragEnd() },
+                            )
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "⠿",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
             }
             Text(
                 text = preset.name,
@@ -401,11 +545,43 @@ private fun PresetRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = preset.durationMillis.formatClockTime(),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (editMode) {
+                Box {
+                    Surface(
+                        onClick = { showMenu = true },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "⚙",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.rename)) },
+                            onClick = { showMenu = false; onRename() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.preset_change_duration)) },
+                            onClick = { showMenu = false; onChangeDuration() },
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = preset.durationMillis.formatClockTime(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

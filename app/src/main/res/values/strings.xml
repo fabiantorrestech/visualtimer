@@ -115,4 +115,9 @@
     <string name="default_duration">Default duration</string>
     <string name="default_duration_not_set">Not set</string>
     <string name="prompt_before_start">Prompt to name before starting</string>
+
+    <!-- Preset actions -->
+    <string name="preset_add_short">+ Add</string>
+    <string name="preset_change_duration">Change duration</string>
+    <string name="preset_clear">Clear preset</string>
 </resources>
