@@ -15,6 +15,9 @@ object TimerRepository {
     private const val KEY_PAUSED_REMAINING = "paused_remaining"
     private const val KEY_OLED_MODE = "oled_mode"
     private const val KEY_SOUND_ENABLED = "sound_enabled"
+    private const val KEY_FINISHED_SOUND_ROUTE = "finished_sound_route"
+    private const val KEY_FINISHED_SOUND_VOLUME = "finished_sound_volume"
+    private const val KEY_OVERRIDE_MUTED_SYSTEM_VOLUME = "override_muted_system_volume"
     private const val KEY_FINISHED_VIBRATION_MODE = "finished_vibration_mode"
     private const val KEY_VIBRATION_ENABLED = "vibration_enabled"
     private const val KEY_KEEP_SCREEN_AWAKE_ENABLED = "keep_screen_awake_enabled"
@@ -28,9 +31,20 @@ object TimerRepository {
     private const val KEY_CLEAN_MODE_ENABLED = "clean_mode_enabled"
     private const val KEY_HIDE_CLOCK_IN_CLEAN_MODE = "hide_clock_in_clean_mode"
     private const val KEY_THEME_MODE = "theme_mode"
+    private const val KEY_ORIGINAL_DURATION = "original_duration"
+    private const val KEY_ACTIVE_TIMER_NAME = "active_timer_name"
+    private const val KEY_ACTIVE_PRESET_ID = "active_preset_id"
+    private const val KEY_DEFAULT_DURATION = "default_duration"
+    private const val KEY_PROMPT_BEFORE_START = "prompt_before_start"
 
     private val mutableState = MutableStateFlow(TimerState())
     val state: StateFlow<TimerState> = mutableState.asStateFlow()
+
+    @Volatile
+    var isAppForeground: Boolean = false
+        private set
+
+    var activeLogEntryId: Long = -1L
 
     private var initialized = false
     private lateinit var appContext: Context
@@ -42,6 +56,10 @@ object TimerRepository {
         preferences = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         mutableState.value = loadState()
         initialized = true
+    }
+
+    fun setAppForeground(foreground: Boolean) {
+        isAppForeground = foreground
     }
 
     fun getState(): TimerState = mutableState.value
@@ -72,8 +90,13 @@ object TimerRepository {
             status == TimerStatus.Running && recomputedRemaining == 0L && persistedSelectedDuration > 0L -> TimerStatus.Finished
             else -> status
         }
-        val selectedDuration = if (normalizedStatus == TimerStatus.Idle) 0L else persistedSelectedDuration
-        val remainingMillis = if (normalizedStatus == TimerStatus.Idle) 0L else recomputedRemaining
+        val defaultDuration = clampDuration(preferences.getLong(KEY_DEFAULT_DURATION, 0L))
+        val selectedDuration = when {
+            normalizedStatus == TimerStatus.Idle -> defaultDuration
+            else -> persistedSelectedDuration
+        }
+        val remainingMillis = if (normalizedStatus == TimerStatus.Idle) selectedDuration else recomputedRemaining
+
         val clockPositionName = preferences.getString(KEY_CLOCK_POSITION, ClockPosition.Left.name)
             ?: ClockPosition.Left.name
         val clockPosition = ClockPosition.entries.firstOrNull { it.name == clockPositionName }
@@ -89,6 +112,12 @@ object TimerRepository {
             } else {
                 FinishedVibrationMode.Off
             }
+        val finishedSoundRoute = preferences.getString(KEY_FINISHED_SOUND_ROUTE, null)
+            ?.let { routeName -> FinishedSoundRoute.entries.firstOrNull { it.name == routeName } }
+            ?: FinishedSoundRoute.Default
+
+        val persistedPresetId = preferences.getLong(KEY_ACTIVE_PRESET_ID, -1L)
+        val activePresetId = if (persistedPresetId >= 0L) persistedPresetId else null
 
         return TimerState(
             status = normalizedStatus,
@@ -98,6 +127,9 @@ object TimerRepository {
             pausedRemainingMillis = if (normalizedStatus == TimerStatus.Paused) clampDuration(pausedRemaining ?: 0L) else null,
             isOledMode = preferences.getBoolean(KEY_OLED_MODE, false),
             soundEnabled = preferences.getBoolean(KEY_SOUND_ENABLED, true),
+            finishedSoundRoute = finishedSoundRoute,
+            finishedSoundVolumePercent = preferences.getInt(KEY_FINISHED_SOUND_VOLUME, 100).coerceIn(0, 100),
+            overrideMutedSystemVolume = preferences.getBoolean(KEY_OVERRIDE_MUTED_SYSTEM_VOLUME, false),
             finishedVibrationMode = finishedVibrationMode,
             keepScreenAwakeEnabled = preferences.getBoolean(KEY_KEEP_SCREEN_AWAKE_ENABLED, false),
             hideStatusBarEnabled = preferences.getBoolean(KEY_HIDE_STATUS_BAR_ENABLED, false),
@@ -112,6 +144,11 @@ object TimerRepository {
             themeMode = ThemeMode.entries.firstOrNull {
                 it.name == preferences.getString(KEY_THEME_MODE, ThemeMode.System.name)
             } ?: ThemeMode.System,
+            originalDurationMillis = clampDuration(preferences.getLong(KEY_ORIGINAL_DURATION, 0L)),
+            activeTimerName = preferences.getString(KEY_ACTIVE_TIMER_NAME, "") ?: "",
+            activePresetId = activePresetId,
+            defaultDurationMillis = defaultDuration,
+            promptBeforeStart = preferences.getBoolean(KEY_PROMPT_BEFORE_START, false),
         )
     }
 
@@ -122,6 +159,9 @@ object TimerRepository {
             .putLong(KEY_REMAINING, state.remainingMillis)
             .putBoolean(KEY_OLED_MODE, state.isOledMode)
             .putBoolean(KEY_SOUND_ENABLED, state.soundEnabled)
+            .putString(KEY_FINISHED_SOUND_ROUTE, state.finishedSoundRoute.name)
+            .putInt(KEY_FINISHED_SOUND_VOLUME, state.finishedSoundVolumePercent)
+            .putBoolean(KEY_OVERRIDE_MUTED_SYSTEM_VOLUME, state.overrideMutedSystemVolume)
             .putString(KEY_FINISHED_VIBRATION_MODE, state.finishedVibrationMode.name)
             .putBoolean(KEY_KEEP_SCREEN_AWAKE_ENABLED, state.keepScreenAwakeEnabled)
             .putBoolean(KEY_HIDE_STATUS_BAR_ENABLED, state.hideStatusBarEnabled)
@@ -134,6 +174,11 @@ object TimerRepository {
             .putBoolean(KEY_CLEAN_MODE_ENABLED, state.cleanModeEnabled)
             .putBoolean(KEY_HIDE_CLOCK_IN_CLEAN_MODE, state.hideClockInCleanMode)
             .putString(KEY_THEME_MODE, state.themeMode.name)
+            .putLong(KEY_ORIGINAL_DURATION, state.originalDurationMillis)
+            .putString(KEY_ACTIVE_TIMER_NAME, state.activeTimerName)
+            .putLong(KEY_ACTIVE_PRESET_ID, state.activePresetId ?: -1L)
+            .putLong(KEY_DEFAULT_DURATION, state.defaultDurationMillis)
+            .putBoolean(KEY_PROMPT_BEFORE_START, state.promptBeforeStart)
             .apply {
                 if (state.targetEndTimeMillis != null) {
                     putLong(KEY_TARGET_END, state.targetEndTimeMillis)

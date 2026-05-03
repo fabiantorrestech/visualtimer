@@ -92,11 +92,11 @@ fun TimerControls(
                     )
                 }
                 PrimaryControlButton(
-                    onClick = { onAction(TimerAction.Start) },
-                    enabled = state.selectedDurationMillis > 0L,
+                    onClick = { onAction(TimerAction.Restart) },
+                    enabled = state.originalDurationMillis > 0L,
                 ) {
                     ControlButtonContent(
-                        iconText = "+",
+                        iconText = "↺",
                         label = stringResource(R.string.restart),
                     )
                 }

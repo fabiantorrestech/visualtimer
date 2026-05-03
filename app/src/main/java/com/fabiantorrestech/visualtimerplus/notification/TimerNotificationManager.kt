@@ -110,8 +110,7 @@ class TimerNotificationManager(
             }
 
             TimerStatus.Idle -> {
-                builder
-                    .setOngoing(false)
+                builder.setOngoing(false)
             }
         }
 

@@ -3,6 +3,7 @@ package com.fabiantorrestech.visualtimerplus.ui.theme
 import androidx.compose.ui.graphics.Color
 
 val TimerRed = Color(0xFFD64545)
+val TimerRedDark = Color(0xFF7A1C1C)
 val LightPrimaryContainer = Color(0xFFFFDAD6)
 val LightOnPrimaryContainer = Color(0xFF410002)
 val LightSecondaryContainer = Color(0xFFFFEDE9)

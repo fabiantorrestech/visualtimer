@@ -1,7 +1,9 @@
 package com.fabiantorrestech.visualtimerplus.timer
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Build
@@ -9,14 +11,23 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.ServiceCompat
+import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
 import com.fabiantorrestech.visualtimerplus.util.Haptics
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class TimerService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var notificationManager: TimerNotificationManager
+    private lateinit var db: AppDatabase
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var finishTone: Ringtone? = null
     private var hasFinishedAlerted = false
+    private var savedStreamVolume: Int = -1
+    private var savedStreamType: Int = -1
     private val stopFinishedVibrationRunnable = Runnable {
         Haptics.stopTimerFinishedVibration(applicationContext)
     }
@@ -47,6 +58,7 @@ class TimerService : Service() {
         super.onCreate()
         TimerRepository.initialize(applicationContext)
         notificationManager = TimerNotificationManager(applicationContext)
+        db = AppDatabase.getInstance(applicationContext)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -56,6 +68,7 @@ class TimerService : Service() {
             ACTION_RESUME -> resumeTimer()
             ACTION_RESET -> resetTimer()
             ACTION_DISMISS_FINISHED -> dismissFinished()
+            ACTION_RESTART -> restartTimer()
             else -> {
                 when (TimerRepository.getState().status) {
                     TimerStatus.Running -> {
@@ -97,6 +110,30 @@ class TimerService : Service() {
                 remainingMillis = durationMillis,
                 targetEndTimeMillis = targetEndTime,
                 pausedRemainingMillis = null,
+                originalDurationMillis = durationMillis,
+            )
+        }
+        promoteToForeground()
+        scheduleTick()
+    }
+
+    private fun restartTimer() {
+        handler.removeCallbacksAndMessages(null)
+        val current = TimerRepository.getState()
+        val originalDuration = current.originalDurationMillis
+        if (originalDuration <= 0L) return
+
+        val targetEndTime = System.currentTimeMillis() + originalDuration
+        hasFinishedAlerted = false
+        stopFinishedAlertEffects()
+        TimerRepository.update { state ->
+            state.copy(
+                status = TimerStatus.Running,
+                selectedDurationMillis = originalDuration,
+                remainingMillis = originalDuration,
+                targetEndTimeMillis = targetEndTime,
+                pausedRemainingMillis = null,
+                originalDurationMillis = originalDuration,
             )
         }
         promoteToForeground()
@@ -147,12 +184,18 @@ class TimerService : Service() {
         handler.removeCallbacksAndMessages(null)
         stopFinishedAlertEffects()
         hasFinishedAlerted = false
+        completeLogEntry()
+        val resetDuration = TimerRepository.getState().defaultDurationMillis.takeIf { it > 0L } ?: 0L
         TimerRepository.update { state ->
             state.copy(
                 status = TimerStatus.Idle,
-                remainingMillis = state.selectedDurationMillis,
+                selectedDurationMillis = resetDuration,
+                remainingMillis = resetDuration,
                 targetEndTimeMillis = null,
                 pausedRemainingMillis = null,
+                originalDurationMillis = 0L,
+                activeTimerName = "",
+                activePresetId = null,
             )
         }
         notificationManager.cancelNotification()
@@ -167,6 +210,7 @@ class TimerService : Service() {
 
     private fun finishTimer() {
         handler.removeCallbacksAndMessages(null)
+        completeLogEntry()
         TimerRepository.update { state ->
             state.copy(
                 status = TimerStatus.Finished,
@@ -179,7 +223,23 @@ class TimerService : Service() {
             hasFinishedAlerted = true
             alertFinished()
         }
-        promoteToForeground()
+        if (!TimerRepository.isAppForeground) {
+            promoteToForeground()
+        }
+    }
+
+    private fun completeLogEntry() {
+        val logId = TimerRepository.activeLogEntryId
+        if (logId < 0L) return
+        TimerRepository.activeLogEntryId = -1L
+        val state = TimerRepository.getState()
+        val adjustedDuration = if (
+            state.originalDurationMillis > 0L &&
+            state.selectedDurationMillis != state.originalDurationMillis
+        ) state.selectedDurationMillis else null
+        serviceScope.launch {
+            db.appDao().completeLogEntry(logId, System.currentTimeMillis(), adjustedDuration)
+        }
     }
 
     private fun promoteToForeground() {
@@ -200,8 +260,25 @@ class TimerService : Service() {
     private fun alertFinished() {
         val state = TimerRepository.getState()
         if (state.soundEnabled) {
-            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            val streamType = when (state.finishedSoundRoute) {
+                FinishedSoundRoute.Alarm -> AudioManager.STREAM_ALARM
+                FinishedSoundRoute.Media -> AudioManager.STREAM_MUSIC
+                else -> AudioManager.STREAM_NOTIFICATION
+            }
+            if (state.overrideMutedSystemVolume && audioManager != null) {
+                val maxVol = audioManager.getStreamMaxVolume(streamType)
+                val targetVol = (maxVol * state.finishedSoundVolumePercent / 100f).toInt().coerceAtLeast(1)
+                savedStreamVolume = audioManager.getStreamVolume(streamType)
+                savedStreamType = streamType
+                audioManager.setStreamVolume(streamType, targetVol, 0)
+            }
+            val soundUri = when (state.finishedSoundRoute) {
+                FinishedSoundRoute.Alarm -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                else -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            }
             finishTone = RingtoneManager.getRingtone(applicationContext, soundUri)?.also { ringtone ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     ringtone.isLooping = false
@@ -222,6 +299,12 @@ class TimerService : Service() {
         Haptics.stopTimerFinishedVibration(applicationContext)
         finishTone?.stop()
         finishTone = null
+        if (savedStreamVolume >= 0 && savedStreamType >= 0) {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            audioManager?.setStreamVolume(savedStreamType, savedStreamVolume, 0)
+            savedStreamVolume = -1
+            savedStreamType = -1
+        }
     }
 
     companion object {
@@ -230,6 +313,7 @@ class TimerService : Service() {
         const val ACTION_RESUME = "com.fabiantorrestech.visualtimerplus.action.RESUME"
         const val ACTION_RESET = "com.fabiantorrestech.visualtimerplus.action.RESET"
         const val ACTION_DISMISS_FINISHED = "com.fabiantorrestech.visualtimerplus.action.DISMISS_FINISHED"
+        const val ACTION_RESTART = "com.fabiantorrestech.visualtimerplus.action.RESTART"
 
         private const val TICK_INTERVAL_MILLIS = 250L
     }

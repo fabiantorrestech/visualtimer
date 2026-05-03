@@ -20,6 +20,13 @@
     <string name="presets">Presets</string>
     <string name="sound">Sound</string>
     <string name="vibrate">Vibrate</string>
+    <string name="finished_sound_route">Finished sound route</string>
+    <string name="finished_sound_route_default">Default</string>
+    <string name="finished_sound_route_alarm">Alarm</string>
+    <string name="finished_sound_route_notification">Notification</string>
+    <string name="finished_sound_route_media">Media</string>
+    <string name="finished_sound_volume">Finished sound volume: %1$d%%</string>
+    <string name="override_muted_system_volume">Temporarily override system stream volume</string>
     <string name="finished_vibration">Finished vibration</string>
     <string name="finished_vibration_off">Off</string>
     <string name="finished_vibration_1m">1 min</string>
@@ -46,6 +53,8 @@
     <string name="settings">Settings</string>
     <string name="settings_title">Timer settings</string>
     <string name="adjust_timer">Adjust timer</string>
+    <string name="duration_original">Original: %1$s</string>
+    <string name="duration_adjusted">Adjusted: %1$s</string>
     <string name="status_ready">Ready</string>
     <string name="status_running">Running</string>
     <string name="status_paused">Paused</string>
@@ -56,4 +65,54 @@
     <string name="resume">Resume</string>
     <string name="reset">Reset</string>
     <string name="dismiss">Dismiss</string>
+
+    <!-- Duration picker -->
+    <string name="set_duration">Set duration</string>
+    <string name="set_duration_confirm">Set</string>
+    <string name="picker_hours">h</string>
+    <string name="picker_minutes">m</string>
+    <string name="picker_seconds">s</string>
+    <string name="picker_invalid">Invalid time</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+
+    <!-- Presets sheet -->
+    <string name="presets_search">Search presets…</string>
+    <string name="presets_empty">No presets yet</string>
+    <string name="preset_add">Add preset</string>
+    <string name="preset_name">Name</string>
+    <string name="preset_duration">Duration</string>
+    <string name="preset_folder">Folder</string>
+    <string name="preset_rename">Rename preset</string>
+    <string name="folder_add">Add folder</string>
+    <string name="folder_add_short">+ Folder</string>
+    <string name="folder_rename">Rename folder</string>
+    <string name="folder_uncategorized">Uncategorized</string>
+    <string name="done">Done</string>
+    <string name="edit">Edit</string>
+    <string name="rename">Rename</string>
+
+    <!-- Timer log -->
+    <string name="log_title">Timer Log</string>
+    <string name="log_empty">No log entries yet</string>
+    <string name="log_filter_last_25">Last 25</string>
+    <string name="log_filter_last_50">Last 50</string>
+    <string name="log_filter_last_75">Last 75</string>
+    <string name="log_filter_last_100">Last 100</string>
+    <string name="log_original">Original</string>
+    <string name="log_adjusted">Adjusted</string>
+    <string name="log_ended">Ended</string>
+    <string name="log_adjusted_badge">Adjusted</string>
+
+    <!-- Timer naming -->
+    <string name="name_placeholder">Tap to name…</string>
+    <string name="name_dialog_title">Name timer</string>
+    <string name="name_dialog_hint">Timer name</string>
+    <string name="name_prompt_title">Name this timer?</string>
+    <string name="name_prompt_skip">Skip</string>
+
+    <!-- Default duration + prompt -->
+    <string name="default_duration">Default duration</string>
+    <string name="default_duration_not_set">Not set</string>
+    <string name="prompt_before_start">Prompt to name before starting</string>
 </resources>

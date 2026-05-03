@@ -3,10 +3,12 @@ package com.fabiantorrestech.visualtimerplus.timer
 import androidx.compose.runtime.Immutable
 
 private const val MINUTE_IN_MILLIS = 60_000L
-const val MAX_DURATION_MILLIS = 60L * MINUTE_IN_MILLIS
+const val MAX_DURATION_MILLIS = 99L * 3600L * 1000L
+const val DRAG_MAX_MILLIS = 2L * 3600L * 1000L
+const val ONE_HOUR_MILLIS = 3600_000L
+const val DURATION_STEP_MILLIS = 60_000L
 
 enum class ThemeMode { Light, Dark, System }
-const val DURATION_STEP_MILLIS = 60_000L
 
 enum class FinishedVibrationMode(val durationMillis: Long?) {
     Off(0L),
@@ -17,6 +19,8 @@ enum class FinishedVibrationMode(val durationMillis: Long?) {
     Forever(null),
 }
 
+enum class FinishedSoundRoute { Default, Alarm, Notification, Media }
+
 @Immutable
 data class TimerState(
     val status: TimerStatus = TimerStatus.Idle,
@@ -26,6 +30,9 @@ data class TimerState(
     val pausedRemainingMillis: Long? = null,
     val isOledMode: Boolean = false,
     val soundEnabled: Boolean = true,
+    val finishedSoundRoute: FinishedSoundRoute = FinishedSoundRoute.Default,
+    val finishedSoundVolumePercent: Int = 100,
+    val overrideMutedSystemVolume: Boolean = false,
     val finishedVibrationMode: FinishedVibrationMode = FinishedVibrationMode.OneMinute,
     val keepScreenAwakeEnabled: Boolean = false,
     val hideStatusBarEnabled: Boolean = false,
@@ -38,6 +45,11 @@ data class TimerState(
     val cleanModeEnabled: Boolean = false,
     val hideClockInCleanMode: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.System,
+    val originalDurationMillis: Long = 0L,
+    val activeTimerName: String = "",
+    val activePresetId: Long? = null,
+    val defaultDurationMillis: Long = 0L,
+    val promptBeforeStart: Boolean = false,
 ) {
     val displayMillis: Long
         get() = when (status) {
@@ -46,6 +58,13 @@ data class TimerState(
             TimerStatus.Finished -> 0L
             TimerStatus.Idle -> selectedDurationMillis
         }
+
+    val adjustedTotalMillis: Long?
+        get() = if (originalDurationMillis > 0L && selectedDurationMillis != originalDurationMillis)
+            selectedDurationMillis else null
+
+    val isTimerNameAdjusted: Boolean
+        get() = activePresetId != null && adjustedTotalMillis != null
 }
 
 enum class TimerStatus {

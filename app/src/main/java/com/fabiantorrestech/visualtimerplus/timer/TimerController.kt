@@ -2,12 +2,20 @@ package com.fabiantorrestech.visualtimerplus.timer
 
 import android.content.Context
 import android.content.Intent
+import com.fabiantorrestech.visualtimerplus.db.AppDatabase
+import com.fabiantorrestech.visualtimerplus.db.TimerLogEntity
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 class TimerController(context: Context) {
     private val appContext = context.applicationContext
     val uiState: StateFlow<TimerState> = TimerRepository.state
+    private val db = AppDatabase.getInstance(appContext)
+    private val controllerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     init {
         TimerRepository.initialize(appContext)
@@ -28,6 +36,23 @@ class TimerController(context: Context) {
                         remainingMillis = snappedDuration,
                         targetEndTimeMillis = null,
                         pausedRemainingMillis = null,
+                        originalDurationMillis = 0L,
+                    )
+                }
+                syncNotification()
+            }
+
+            is TimerAction.SetDurationExact -> {
+                if (TimerRepository.getState().status == TimerStatus.Running) return
+                val clamped = clampDuration(action.durationMillis)
+                TimerRepository.update { state ->
+                    state.copy(
+                        status = TimerStatus.Idle,
+                        selectedDurationMillis = clamped,
+                        remainingMillis = clamped,
+                        targetEndTimeMillis = null,
+                        pausedRemainingMillis = null,
+                        originalDurationMillis = 0L,
                     )
                 }
                 syncNotification()
@@ -80,6 +105,18 @@ class TimerController(context: Context) {
 
             is TimerAction.SetSoundEnabled -> {
                 TimerRepository.update { state -> state.copy(soundEnabled = action.enabled) }
+            }
+
+            is TimerAction.SetFinishedSoundRoute -> {
+                TimerRepository.update { state -> state.copy(finishedSoundRoute = action.route) }
+            }
+
+            is TimerAction.SetFinishedSoundVolumePercent -> {
+                TimerRepository.update { state -> state.copy(finishedSoundVolumePercent = action.percent.coerceIn(0, 100)) }
+            }
+
+            is TimerAction.SetOverrideMutedSystemVolume -> {
+                TimerRepository.update { state -> state.copy(overrideMutedSystemVolume = action.enabled) }
             }
 
             is TimerAction.SetFinishedVibrationMode -> {
@@ -141,10 +178,27 @@ class TimerController(context: Context) {
                 TimerRepository.update { state -> state.copy(themeMode = action.mode) }
             }
 
+            is TimerAction.SetActiveTimerName -> {
+                TimerRepository.update { state -> state.copy(activeTimerName = action.name) }
+            }
+
+            is TimerAction.SetActivePresetId -> {
+                TimerRepository.update { state -> state.copy(activePresetId = action.id) }
+            }
+
+            is TimerAction.SetDefaultDuration -> {
+                TimerRepository.update { state -> state.copy(defaultDurationMillis = clampDuration(action.durationMillis)) }
+            }
+
+            is TimerAction.SetPromptBeforeStart -> {
+                TimerRepository.update { state -> state.copy(promptBeforeStart = action.enabled) }
+            }
+
             TimerAction.Start -> {
                 val current = TimerRepository.getState()
                 val durationMillis = current.selectedDurationMillis
                 if (durationMillis <= 0L || current.status == TimerStatus.Running) return
+                createLogEntry()
                 startService(TimerService.ACTION_START, foreground = true)
             }
 
@@ -165,12 +219,17 @@ class TimerController(context: Context) {
                 if (current.status != TimerStatus.Idle) {
                     startService(TimerService.ACTION_RESET, foreground = false)
                 } else {
+                    val resetDuration = current.defaultDurationMillis.takeIf { it > 0L } ?: 0L
                     TimerRepository.update { state ->
                         state.copy(
                             status = TimerStatus.Idle,
-                            remainingMillis = state.selectedDurationMillis,
+                            selectedDurationMillis = resetDuration,
+                            remainingMillis = resetDuration,
                             targetEndTimeMillis = null,
                             pausedRemainingMillis = null,
+                            originalDurationMillis = 0L,
+                            activeTimerName = "",
+                            activePresetId = null,
                         )
                     }
                     syncNotification()
@@ -181,6 +240,13 @@ class TimerController(context: Context) {
                 if (TimerRepository.getState().status == TimerStatus.Finished) {
                     startService(TimerService.ACTION_DISMISS_FINISHED, foreground = false)
                 }
+            }
+
+            TimerAction.Restart -> {
+                val current = TimerRepository.getState()
+                if (current.status != TimerStatus.Finished || current.originalDurationMillis <= 0L) return
+                createLogEntry()
+                startService(TimerService.ACTION_RESTART, foreground = true)
             }
         }
     }
@@ -195,6 +261,25 @@ class TimerController(context: Context) {
 
     fun dismissFinishedIfActive() {
         dispatch(TimerAction.DismissFinished)
+    }
+
+    private fun createLogEntry() {
+        val state = TimerRepository.getState()
+        controllerScope.launch {
+            val count = db.appDao().getLogCount()
+            if (count >= 100) {
+                db.appDao().deleteOldestLogEntry()
+            }
+            val id = db.appDao().insertLogEntry(
+                TimerLogEntity(
+                    startedAt = System.currentTimeMillis(),
+                    originalDurationMillis = state.selectedDurationMillis,
+                    timerName = state.activeTimerName.ifBlank { "Default" },
+                    presetId = state.activePresetId,
+                ),
+            )
+            TimerRepository.activeLogEntryId = id
+        }
     }
 
     private fun startService(action: String, foreground: Boolean) {

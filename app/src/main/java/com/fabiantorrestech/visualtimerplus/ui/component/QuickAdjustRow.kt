@@ -13,6 +13,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+private const val MINUTE_MILLIS = 60_000L
+private const val SECOND_MILLIS = 1_000L
+
 @Composable
 fun QuickAdjustRow(
     onAdjust: (Long) -> Unit,
@@ -21,12 +24,14 @@ fun QuickAdjustRow(
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        QuickAdjustChip(label = "-5", enabled = enabled) { onAdjust(-5) }
-        QuickAdjustChip(label = "-1", enabled = enabled) { onAdjust(-1) }
-        QuickAdjustChip(label = "+1", enabled = enabled) { onAdjust(1) }
-        QuickAdjustChip(label = "+5", enabled = enabled) { onAdjust(5) }
+        QuickAdjustChip(label = "-5", enabled = enabled) { onAdjust(-5 * MINUTE_MILLIS) }
+        QuickAdjustChip(label = "-1", enabled = enabled) { onAdjust(-1 * MINUTE_MILLIS) }
+        QuickAdjustChip(label = "-:30", enabled = enabled) { onAdjust(-30 * SECOND_MILLIS) }
+        QuickAdjustChip(label = "+:30", enabled = enabled) { onAdjust(30 * SECOND_MILLIS) }
+        QuickAdjustChip(label = "+1", enabled = enabled) { onAdjust(1 * MINUTE_MILLIS) }
+        QuickAdjustChip(label = "+5", enabled = enabled) { onAdjust(5 * MINUTE_MILLIS) }
     }
 }
 
