@@ -141,7 +141,7 @@ fun TimerScreen(
 
     LaunchedEffect(isCleanModeActive, cleanModeActivityTick) {
         if (!isCleanModeActive || !cleanModeUiAwake) return@LaunchedEffect
-        delay(5_000L)
+        delay(3_000L)
         cleanModeUiAwake = false
         cleanModeControlsExpanded = false
     }
@@ -438,11 +438,12 @@ private fun PortraitLayout(
                 )
             }
         } else {
+            val interactable = minimalUiAlpha > 0.99f
             CleanModeQuickAdjust(
                 controlsExpanded = cleanModeControlsExpanded,
                 controlsAlpha = minimalUiAlpha,
-                onExpand = onCleanModeExpand,
-                onAdjust = onCleanModeAdjust,
+                onExpand = { if (interactable) onCleanModeExpand() },
+                onAdjust = { delta -> if (interactable) onCleanModeAdjust(delta) },
             )
         }
 
@@ -450,9 +451,11 @@ private fun PortraitLayout(
         SectionCard(
             modifier = Modifier.alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
         ) {
+            val interactable = !isCleanModeActive || minimalUiAlpha > 0.99f
             TimerControls(
                 state = state,
                 onAction = { action ->
+                    if (!interactable) return@TimerControls
                     if (action == TimerAction.Start) onStartWithPromptCheck()
                     else onAction(action)
                 },
@@ -462,7 +465,7 @@ private fun PortraitLayout(
 
         Spacer(modifier = Modifier.height(8.dp))
         AssistChip(
-            onClick = onOpenSettings,
+            onClick = { if (!isCleanModeActive || minimalUiAlpha > 0.99f) onOpenSettings() },
             label = { Text(text = stringResource(R.string.settings)) },
             modifier = Modifier
                 .align(Alignment.Start)
@@ -573,11 +576,12 @@ private fun LandscapeLayout(
                     )
                 }
             } else {
+                val interactable = minimalUiAlpha > 0.99f
                 CleanModeQuickAdjust(
                     controlsExpanded = cleanModeControlsExpanded,
                     controlsAlpha = minimalUiAlpha,
-                    onExpand = onCleanModeExpand,
-                    onAdjust = onCleanModeAdjust,
+                    onExpand = { if (interactable) onCleanModeExpand() },
+                    onAdjust = { delta -> if (interactable) onCleanModeAdjust(delta) },
                 )
             }
 
@@ -585,9 +589,11 @@ private fun LandscapeLayout(
             SectionCard(
                 modifier = Modifier.alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
             ) {
+                val interactable = !isCleanModeActive || minimalUiAlpha > 0.99f
                 TimerControls(
                     state = state,
                     onAction = { action ->
+                        if (!interactable) return@TimerControls
                         if (action == TimerAction.Start) onStartWithPromptCheck()
                         else onAction(action)
                     },
@@ -597,7 +603,7 @@ private fun LandscapeLayout(
 
             Spacer(modifier = Modifier.height(8.dp))
             AssistChip(
-                onClick = onOpenSettings,
+                onClick = { if (!isCleanModeActive || minimalUiAlpha > 0.99f) onOpenSettings() },
                 label = { Text(text = stringResource(R.string.settings)) },
                 modifier = Modifier
                     .align(Alignment.Start)
