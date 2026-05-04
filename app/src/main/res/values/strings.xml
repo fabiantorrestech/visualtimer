@@ -27,6 +27,7 @@
     <string name="finished_sound_route_media">Media</string>
     <string name="finished_sound_volume">Finished sound volume: %1$d%%</string>
     <string name="override_muted_system_volume">Temporarily override system stream volume</string>
+    <string name="ignore_silent_mode">Ignore silent/vibrate mode</string>
     <string name="finished_vibration">Finished vibration</string>
     <string name="finished_vibration_off">Off</string>
     <string name="finished_vibration_1m">1 min</string>
@@ -48,6 +49,7 @@
     <string name="clock_size_medium">Medium</string>
     <string name="clock_size_large">Large</string>
     <string name="clockwise_mode">Clockwise mode</string>
+    <string name="full_clock_mode">Full clock mode (start from full circle)</string>
     <string name="clean_mode">Minimal mode</string>
     <string name="hide_clock_in_minimal_mode">Hide clock in minimal mode</string>
     <string name="settings">Settings</string>

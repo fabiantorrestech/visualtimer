@@ -141,10 +141,10 @@ fun DurationPickerContent(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Left: title + time display
+            // Left: title + time display — wider weight so digit groups don't wrap
             Column(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(1.3f)
                     .fillMaxHeight(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -160,11 +160,11 @@ fun DurationPickerContent(
                     horizontalArrangement = Arrangement.Center,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    DigitGroup(value = displayHH(), label = stringResource(R.string.picker_hours))
-                    SeparatorText()
-                    DigitGroup(value = displayMM(), label = stringResource(R.string.picker_minutes))
-                    SeparatorText()
-                    DigitGroup(value = displaySS(), label = stringResource(R.string.picker_seconds))
+                    DigitGroup(value = displayHH(), label = stringResource(R.string.picker_hours), compact = true)
+                    SeparatorText(compact = true)
+                    DigitGroup(value = displayMM(), label = stringResource(R.string.picker_minutes), compact = true)
+                    SeparatorText(compact = true)
+                    DigitGroup(value = displaySS(), label = stringResource(R.string.picker_seconds), compact = true)
                 }
                 if (!isValid() && digits.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -298,7 +298,21 @@ fun DurationPickerContent(
 }
 
 @Composable
-private fun DigitGroup(value: String, label: String) {
+private fun DigitGroup(value: String, label: String, compact: Boolean = false) {
+    val textStyle = if (compact) {
+        MaterialTheme.typography.headlineLarge.copy(
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+        )
+    } else {
+        MaterialTheme.typography.displayMedium.copy(
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+    val hPad = if (compact) 10.dp else 16.dp
+    val vPad = if (compact) 6.dp else 8.dp
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
@@ -306,15 +320,12 @@ private fun DigitGroup(value: String, label: String) {
                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
                     RoundedCornerShape(12.dp),
                 )
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = hPad, vertical = vPad),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = value,
-                style = MaterialTheme.typography.displayMedium.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                ),
+                style = textStyle,
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
@@ -328,12 +339,17 @@ private fun DigitGroup(value: String, label: String) {
 }
 
 @Composable
-private fun SeparatorText() {
+private fun SeparatorText(compact: Boolean = false) {
+    val style = if (compact) {
+        MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Light)
+    } else {
+        MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Light)
+    }
     Text(
         text = ":",
-        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Light),
+        style = style,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 8.dp, vertical = 0.dp),
+        modifier = Modifier.padding(horizontal = if (compact) 4.dp else 8.dp, vertical = 0.dp),
     )
 }
 

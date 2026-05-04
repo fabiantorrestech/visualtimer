@@ -8,6 +8,8 @@ sealed interface TimerAction {
     data class SetFinishedSoundRoute(val route: FinishedSoundRoute) : TimerAction
     data class SetFinishedSoundVolumePercent(val percent: Int) : TimerAction
     data class SetOverrideMutedSystemVolume(val enabled: Boolean) : TimerAction
+    data class SetIgnoreSilentMode(val enabled: Boolean) : TimerAction
+    data class SetFullClockMode(val enabled: Boolean) : TimerAction
     data class SetFinishedVibrationMode(val mode: FinishedVibrationMode) : TimerAction
     data class SetKeepScreenAwakeEnabled(val enabled: Boolean) : TimerAction
     data class SetHideStatusBarEnabled(val enabled: Boolean) : TimerAction

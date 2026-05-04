@@ -890,6 +890,12 @@ private fun SettingsSheetContent(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 PreferenceToggle(
+                    label = stringResource(R.string.ignore_silent_mode),
+                    checked = state.ignoreSilentMode,
+                    onCheckedChange = { onAction(TimerAction.SetIgnoreSilentMode(it)) },
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                PreferenceToggle(
                     label = stringResource(R.string.override_muted_system_volume),
                     checked = state.overrideMutedSystemVolume,
                     onCheckedChange = { onAction(TimerAction.SetOverrideMutedSystemVolume(it)) },
@@ -957,6 +963,12 @@ private fun SettingsSheetContent(
                 label = stringResource(R.string.clockwise_mode),
                 checked = state.clockwiseModeEnabled,
                 onCheckedChange = { onAction(TimerAction.SetClockwiseModeEnabled(it)) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.full_clock_mode),
+                checked = state.fullClockMode,
+                onCheckedChange = { onAction(TimerAction.SetFullClockMode(it)) },
             )
             Spacer(modifier = Modifier.height(12.dp))
             PreferenceToggle(

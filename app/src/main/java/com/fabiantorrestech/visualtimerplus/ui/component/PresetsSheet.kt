@@ -742,6 +742,11 @@ private fun PresetSettingsSheet(
                     onChange = { current = current.copy(finishedSoundVolumePercent = it) },
                 )
                 NullableBoolRow(
+                    label = stringResource(R.string.ignore_silent_mode),
+                    value = current.ignoreSilentMode,
+                    onChange = { current = current.copy(ignoreSilentMode = it) },
+                )
+                NullableBoolRow(
                     label = stringResource(R.string.override_muted_system_volume),
                     value = current.overrideSystemVolume,
                     onChange = { current = current.copy(overrideSystemVolume = it) },

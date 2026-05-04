@@ -18,6 +18,8 @@ object TimerRepository {
     private const val KEY_FINISHED_SOUND_ROUTE = "finished_sound_route"
     private const val KEY_FINISHED_SOUND_VOLUME = "finished_sound_volume"
     private const val KEY_OVERRIDE_MUTED_SYSTEM_VOLUME = "override_muted_system_volume"
+    private const val KEY_IGNORE_SILENT_MODE = "ignore_silent_mode"
+    private const val KEY_FULL_CLOCK_MODE = "full_clock_mode"
     private const val KEY_FINISHED_VIBRATION_MODE = "finished_vibration_mode"
     private const val KEY_VIBRATION_ENABLED = "vibration_enabled"
     private const val KEY_KEEP_SCREEN_AWAKE_ENABLED = "keep_screen_awake_enabled"
@@ -130,6 +132,8 @@ object TimerRepository {
             finishedSoundRoute = finishedSoundRoute,
             finishedSoundVolumePercent = preferences.getInt(KEY_FINISHED_SOUND_VOLUME, 100).coerceIn(0, 100),
             overrideMutedSystemVolume = preferences.getBoolean(KEY_OVERRIDE_MUTED_SYSTEM_VOLUME, false),
+            ignoreSilentMode = preferences.getBoolean(KEY_IGNORE_SILENT_MODE, false),
+            fullClockMode = preferences.getBoolean(KEY_FULL_CLOCK_MODE, false),
             finishedVibrationMode = finishedVibrationMode,
             keepScreenAwakeEnabled = preferences.getBoolean(KEY_KEEP_SCREEN_AWAKE_ENABLED, false),
             hideStatusBarEnabled = preferences.getBoolean(KEY_HIDE_STATUS_BAR_ENABLED, false),
@@ -162,6 +166,8 @@ object TimerRepository {
             .putString(KEY_FINISHED_SOUND_ROUTE, state.finishedSoundRoute.name)
             .putInt(KEY_FINISHED_SOUND_VOLUME, state.finishedSoundVolumePercent)
             .putBoolean(KEY_OVERRIDE_MUTED_SYSTEM_VOLUME, state.overrideMutedSystemVolume)
+            .putBoolean(KEY_IGNORE_SILENT_MODE, state.ignoreSilentMode)
+            .putBoolean(KEY_FULL_CLOCK_MODE, state.fullClockMode)
             .putString(KEY_FINISHED_VIBRATION_MODE, state.finishedVibrationMode.name)
             .putBoolean(KEY_KEEP_SCREEN_AWAKE_ENABLED, state.keepScreenAwakeEnabled)
             .putBoolean(KEY_HIDE_STATUS_BAR_ENABLED, state.hideStatusBarEnabled)

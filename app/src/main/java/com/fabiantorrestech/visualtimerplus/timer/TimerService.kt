@@ -261,9 +261,11 @@ class TimerService : Service() {
         val state = TimerRepository.getState()
         if (state.soundEnabled) {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            val streamType = when (state.finishedSoundRoute) {
-                FinishedSoundRoute.Alarm -> AudioManager.STREAM_ALARM
-                FinishedSoundRoute.Media -> AudioManager.STREAM_MUSIC
+            // ignoreSilentMode forces STREAM_ALARM so the sound plays even in silent/vibrate
+            val streamType = when {
+                state.ignoreSilentMode -> AudioManager.STREAM_ALARM
+                state.finishedSoundRoute == FinishedSoundRoute.Alarm -> AudioManager.STREAM_ALARM
+                state.finishedSoundRoute == FinishedSoundRoute.Media -> AudioManager.STREAM_MUSIC
                 else -> AudioManager.STREAM_NOTIFICATION
             }
             if (audioManager != null) {
@@ -284,6 +286,16 @@ class TimerService : Service() {
             finishTone = RingtoneManager.getRingtone(applicationContext, soundUri)?.also { ringtone ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     ringtone.isLooping = false
+                    // Force alarm audio attributes so Ringtone bypasses ringer/silent mode
+                    if (streamType == AudioManager.STREAM_ALARM) {
+                        ringtone.audioAttributes = android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    }
+                } else {
+                    @Suppress("DEPRECATION")
+                    ringtone.streamType = streamType
                 }
                 ringtone.play()
             }

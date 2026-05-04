@@ -121,6 +121,14 @@ class TimerController(context: Context) {
                 TimerRepository.update { state -> state.copy(overrideMutedSystemVolume = action.enabled) }
             }
 
+            is TimerAction.SetIgnoreSilentMode -> {
+                TimerRepository.update { state -> state.copy(ignoreSilentMode = action.enabled) }
+            }
+
+            is TimerAction.SetFullClockMode -> {
+                TimerRepository.update { state -> state.copy(fullClockMode = action.enabled) }
+            }
+
             is TimerAction.SetFinishedVibrationMode -> {
                 TimerRepository.update { state -> state.copy(finishedVibrationMode = action.mode) }
             }

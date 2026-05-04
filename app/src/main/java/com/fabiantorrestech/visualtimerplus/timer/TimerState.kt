@@ -33,6 +33,8 @@ data class TimerState(
     val finishedSoundRoute: FinishedSoundRoute = FinishedSoundRoute.Default,
     val finishedSoundVolumePercent: Int = 100,
     val overrideMutedSystemVolume: Boolean = false,
+    val ignoreSilentMode: Boolean = false,
+    val fullClockMode: Boolean = false,
     val finishedVibrationMode: FinishedVibrationMode = FinishedVibrationMode.OneMinute,
     val keepScreenAwakeEnabled: Boolean = false,
     val hideStatusBarEnabled: Boolean = false,

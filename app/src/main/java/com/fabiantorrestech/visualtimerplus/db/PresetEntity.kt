@@ -32,4 +32,5 @@ data class PresetEntity(
     val showSeconds: Boolean? = null,
     val clockPositionName: String? = null,
     val clockSizeName: String? = null,
+    val ignoreSilentMode: Boolean? = null,
 )

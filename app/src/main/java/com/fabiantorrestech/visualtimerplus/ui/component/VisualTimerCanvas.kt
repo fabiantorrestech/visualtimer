@@ -40,21 +40,33 @@ fun VisualTimerCanvas(
     val overlayArcFraction: Float
     val showTwoLayer: Boolean
 
-    when {
-        displayMs >= DRAG_MAX_MILLIS -> {
-            showTwoLayer = true
-            baseArcFraction = 1f
-            overlayArcFraction = 1f
-        }
-        displayMs > ONE_HOUR_MILLIS -> {
-            showTwoLayer = true
-            baseArcFraction = 1f
-            overlayArcFraction = ((displayMs - ONE_HOUR_MILLIS).toFloat() / ONE_HOUR_MILLIS).coerceIn(0f, 1f)
-        }
-        else -> {
-            showTwoLayer = false
-            baseArcFraction = (displayMs.toFloat() / ONE_HOUR_MILLIS).coerceIn(0f, 1f)
-            overlayArcFraction = 0f
+    // Full-clock mode: when running/paused, show remaining as a fraction of the total duration
+    // (single bright-red arc that starts full and drains to zero). Idle keeps the hour-based
+    // layered display so drag winding still gives visual feedback.
+    val useFullClock = state.fullClockMode && state.status != TimerStatus.Idle
+
+    if (useFullClock) {
+        showTwoLayer = false
+        overlayArcFraction = 0f
+        val total = state.selectedDurationMillis.coerceAtLeast(1L)
+        baseArcFraction = (displayMs.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+    } else {
+        when {
+            displayMs >= DRAG_MAX_MILLIS -> {
+                showTwoLayer = true
+                baseArcFraction = 1f
+                overlayArcFraction = 1f
+            }
+            displayMs > ONE_HOUR_MILLIS -> {
+                showTwoLayer = true
+                baseArcFraction = 1f
+                overlayArcFraction = ((displayMs - ONE_HOUR_MILLIS).toFloat() / ONE_HOUR_MILLIS).coerceIn(0f, 1f)
+            }
+            else -> {
+                showTwoLayer = false
+                baseArcFraction = (displayMs.toFloat() / ONE_HOUR_MILLIS).coerceIn(0f, 1f)
+                overlayArcFraction = 0f
+            }
         }
     }
 
