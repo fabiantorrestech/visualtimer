@@ -28,8 +28,16 @@ class TimerService : Service() {
     private var hasFinishedAlerted = false
     private var savedStreamVolume: Int = -1
     private var savedStreamType: Int = -1
+    private val replayToneRunnable = object : Runnable {
+        override fun run() {
+            val tone = finishTone ?: return
+            if (!tone.isPlaying) tone.play()
+            handler.postDelayed(this, 500L)
+        }
+    }
+
     private val stopFinishedVibrationRunnable = Runnable {
-        Haptics.stopTimerFinishedVibration(applicationContext)
+        stopFinishedAlertEffects()
     }
 
     private val ticker = object : Runnable {
@@ -292,7 +300,7 @@ class TimerService : Service() {
             }
             finishTone = RingtoneManager.getRingtone(applicationContext, soundUri)?.also { ringtone ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    ringtone.isLooping = false
+                    ringtone.isLooping = true
                     // Force alarm audio attributes so Ringtone bypasses ringer/silent mode
                     if (streamType == AudioManager.STREAM_ALARM) {
                         ringtone.audioAttributes = android.media.AudioAttributes.Builder()
@@ -303,6 +311,7 @@ class TimerService : Service() {
                 } else {
                     @Suppress("DEPRECATION")
                     ringtone.streamType = streamType
+                    handler.postDelayed(replayToneRunnable, 500L)
                 }
                 ringtone.play()
             }
@@ -317,6 +326,7 @@ class TimerService : Service() {
 
     private fun stopFinishedAlertEffects() {
         handler.removeCallbacks(stopFinishedVibrationRunnable)
+        handler.removeCallbacks(replayToneRunnable)
         Haptics.stopTimerFinishedVibration(applicationContext)
         finishTone?.stop()
         finishTone = null
