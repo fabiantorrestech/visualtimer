@@ -112,6 +112,8 @@ fun TimerScreen(
     var cleanModeUiAwake by rememberSaveable { mutableStateOf(false) }
     var cleanModeControlsExpanded by rememberSaveable { mutableStateOf(false) }
     var cleanModeActivityTick by rememberSaveable { mutableStateOf(0) }
+    // Tracks whether clean mode was genuinely entered this session (not just a rotation).
+    var cleanModeWasActive by rememberSaveable { mutableStateOf(false) }
 
     val minimalUiAlpha by animateFloatAsState(
         targetValue = if (isCleanModeActive && !cleanModeUiAwake) 0f else 1f,
@@ -132,7 +134,10 @@ fun TimerScreen(
         if (!isCleanModeActive) {
             cleanModeUiAwake = false
             cleanModeControlsExpanded = false
-        } else {
+            cleanModeWasActive = false
+        } else if (!cleanModeWasActive) {
+            // Genuine entry into clean mode (not a rotation with clean mode already active).
+            cleanModeWasActive = true
             cleanModeUiAwake = true
             cleanModeControlsExpanded = false
             cleanModeActivityTick += 1
@@ -265,7 +270,7 @@ fun TimerScreen(
                 onOpenPresets = { showPresetsSheet = true },
                 onOpenDurationPicker = { if (state.status == TimerStatus.Idle) showDurationPicker = true },
                 onNameChipClick = {
-                    if (state.status != TimerStatus.Running) showNameDialog = true
+                    showNameDialog = true
                 },
                 onClearPreset = {
                     onAction(TimerAction.SetActivePresetId(null))
@@ -300,7 +305,7 @@ fun TimerScreen(
                 onOpenPresets = { showPresetsSheet = true },
                 onOpenDurationPicker = { if (state.status == TimerStatus.Idle) showDurationPicker = true },
                 onNameChipClick = {
-                    if (state.status != TimerStatus.Running) showNameDialog = true
+                    showNameDialog = true
                 },
                 onClearPreset = {
                     onAction(TimerAction.SetActivePresetId(null))
@@ -689,7 +694,6 @@ private fun TimerNameChip(
     ) {
         Surface(
             onClick = onNameChipClick,
-            enabled = state.status != TimerStatus.Running,
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
@@ -723,13 +727,11 @@ private fun TimerNameChip(
                         )
                     }
                 }
-                if (state.status != TimerStatus.Running) {
-                    Text(
-                        text = "✎",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    )
-                }
+                Text(
+                    text = "✎",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                )
             }
         }
         // Clear preset association button — only visible when a preset is active
@@ -1047,9 +1049,8 @@ private fun CleanModeQuickAdjust(
     onAdjust: (Long) -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(72.dp),
+        modifier = if (controlsExpanded && controlsAlpha > 0f) Modifier.fillMaxWidth()
+                   else Modifier.fillMaxWidth().height(72.dp),
         contentAlignment = Alignment.Center,
     ) {
         if (controlsExpanded && controlsAlpha > 0f) {
