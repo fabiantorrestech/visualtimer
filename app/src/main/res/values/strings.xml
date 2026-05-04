@@ -52,6 +52,10 @@
     <string name="full_clock_mode">Full clock mode (start from full circle)</string>
     <string name="clean_mode">Minimal mode</string>
     <string name="hide_clock_in_minimal_mode">Hide clock in minimal mode</string>
+    <string name="timer_title_enabled">Show timer name overlay</string>
+    <string name="timer_title_hide_in_clean_mode">Hide in minimal mode</string>
+    <string name="timer_title_position">Title position</string>
+    <string name="timer_title_size">Title size</string>
     <string name="settings">Settings</string>
     <string name="settings_title">Timer settings</string>
     <string name="adjust_timer">Adjust timer</string>

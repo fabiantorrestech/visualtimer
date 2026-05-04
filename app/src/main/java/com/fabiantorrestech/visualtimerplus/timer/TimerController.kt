@@ -184,6 +184,22 @@ class TimerController(context: Context) {
                 TimerRepository.update { state -> state.copy(hideClockInCleanMode = action.enabled) }
             }
 
+            is TimerAction.SetTimerTitleEnabled -> {
+                TimerRepository.update { state -> state.copy(timerTitleEnabled = action.enabled) }
+            }
+
+            is TimerAction.SetTimerTitleHideInCleanMode -> {
+                TimerRepository.update { state -> state.copy(timerTitleHideInCleanMode = action.enabled) }
+            }
+
+            is TimerAction.SetTimerTitlePosition -> {
+                TimerRepository.update { state -> state.copy(timerTitlePosition = action.position) }
+            }
+
+            is TimerAction.SetTimerTitleSize -> {
+                TimerRepository.update { state -> state.copy(timerTitleSize = action.size) }
+            }
+
             is TimerAction.SetThemeMode -> {
                 TimerRepository.update { state -> state.copy(themeMode = action.mode) }
             }

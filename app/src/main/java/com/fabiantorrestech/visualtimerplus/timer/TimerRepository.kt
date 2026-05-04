@@ -32,6 +32,10 @@ object TimerRepository {
     private const val KEY_CLOCKWISE_MODE_ENABLED = "clockwise_mode_enabled"
     private const val KEY_CLEAN_MODE_ENABLED = "clean_mode_enabled"
     private const val KEY_HIDE_CLOCK_IN_CLEAN_MODE = "hide_clock_in_clean_mode"
+    private const val KEY_TIMER_TITLE_ENABLED = "timer_title_enabled"
+    private const val KEY_TIMER_TITLE_HIDE_IN_CLEAN_MODE = "timer_title_hide_in_clean_mode"
+    private const val KEY_TIMER_TITLE_POSITION = "timer_title_position"
+    private const val KEY_TIMER_TITLE_SIZE = "timer_title_size"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_ORIGINAL_DURATION = "original_duration"
     private const val KEY_ACTIVE_TIMER_NAME = "active_timer_name"
@@ -145,6 +149,14 @@ object TimerRepository {
             clockwiseModeEnabled = preferences.getBoolean(KEY_CLOCKWISE_MODE_ENABLED, true),
             cleanModeEnabled = preferences.getBoolean(KEY_CLEAN_MODE_ENABLED, false),
             hideClockInCleanMode = preferences.getBoolean(KEY_HIDE_CLOCK_IN_CLEAN_MODE, false),
+            timerTitleEnabled = preferences.getBoolean(KEY_TIMER_TITLE_ENABLED, false),
+            timerTitleHideInCleanMode = preferences.getBoolean(KEY_TIMER_TITLE_HIDE_IN_CLEAN_MODE, false),
+            timerTitlePosition = ClockPosition.entries.firstOrNull {
+                it.name == preferences.getString(KEY_TIMER_TITLE_POSITION, ClockPosition.Center.name)
+            } ?: ClockPosition.Center,
+            timerTitleSize = ClockTextSize.entries.firstOrNull {
+                it.name == preferences.getString(KEY_TIMER_TITLE_SIZE, ClockTextSize.Medium.name)
+            } ?: ClockTextSize.Medium,
             themeMode = ThemeMode.entries.firstOrNull {
                 it.name == preferences.getString(KEY_THEME_MODE, ThemeMode.System.name)
             } ?: ThemeMode.System,
@@ -179,6 +191,10 @@ object TimerRepository {
             .putBoolean(KEY_CLOCKWISE_MODE_ENABLED, state.clockwiseModeEnabled)
             .putBoolean(KEY_CLEAN_MODE_ENABLED, state.cleanModeEnabled)
             .putBoolean(KEY_HIDE_CLOCK_IN_CLEAN_MODE, state.hideClockInCleanMode)
+            .putBoolean(KEY_TIMER_TITLE_ENABLED, state.timerTitleEnabled)
+            .putBoolean(KEY_TIMER_TITLE_HIDE_IN_CLEAN_MODE, state.timerTitleHideInCleanMode)
+            .putString(KEY_TIMER_TITLE_POSITION, state.timerTitlePosition.name)
+            .putString(KEY_TIMER_TITLE_SIZE, state.timerTitleSize.name)
             .putString(KEY_THEME_MODE, state.themeMode.name)
             .putLong(KEY_ORIGINAL_DURATION, state.originalDurationMillis)
             .putString(KEY_ACTIVE_TIMER_NAME, state.activeTimerName)

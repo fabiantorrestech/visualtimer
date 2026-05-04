@@ -390,10 +390,18 @@ private fun PortraitLayout(
                     isLandscape = false,
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(4.dp))
         } else {
             Spacer(modifier = Modifier.height(16.dp))
         }
+
+        TimerTitleDisplay(
+            state = state,
+            isCleanModeActive = isCleanModeActive,
+            minimalUiAlpha = minimalUiAlpha,
+        )
+
+        Spacer(modifier = Modifier.height(if (state.timerTitleEnabled && state.activeTimerName.isNotBlank()) 8.dp else 0.dp))
 
         StatusAndLogRow(
             state = state,
@@ -542,8 +550,16 @@ private fun LandscapeLayout(
                     clockTextSize = state.clockTextSize,
                     isLandscape = true,
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
             }
+
+            TimerTitleDisplay(
+                state = state,
+                isCleanModeActive = isCleanModeActive,
+                minimalUiAlpha = minimalUiAlpha,
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             StatusAndLogRow(
                 state = state,
@@ -996,6 +1012,32 @@ private fun SettingsSheetContent(
                     onCheckedChange = { onAction(TimerAction.SetHideClockInCleanMode(it)) },
                 )
             }
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.timer_title_enabled),
+                checked = state.timerTitleEnabled,
+                onCheckedChange = { onAction(TimerAction.SetTimerTitleEnabled(it)) },
+            )
+            if (state.timerTitleEnabled) {
+                Spacer(modifier = Modifier.height(12.dp))
+                TitlePositionSelector(
+                    selectedPosition = state.timerTitlePosition,
+                    onPositionSelected = { onAction(TimerAction.SetTimerTitlePosition(it)) },
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                TitleSizeSelector(
+                    selectedSize = state.timerTitleSize,
+                    onSizeSelected = { onAction(TimerAction.SetTimerTitleSize(it)) },
+                )
+                if (state.cleanModeEnabled) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    PreferenceToggle(
+                        label = stringResource(R.string.timer_title_hide_in_clean_mode),
+                        checked = state.timerTitleHideInCleanMode,
+                        onCheckedChange = { onAction(TimerAction.SetTimerTitleHideInCleanMode(it)) },
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -1277,6 +1319,68 @@ private fun ClockTextSizeSelector(
 }
 
 @Composable
+private fun TitlePositionSelector(
+    selectedPosition: ClockPosition,
+    onPositionSelected: (ClockPosition) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.timer_title_position),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SelectorChip(
+                label = stringResource(R.string.clock_left),
+                selected = selectedPosition == ClockPosition.Left,
+                onClick = { onPositionSelected(ClockPosition.Left) },
+            )
+            SelectorChip(
+                label = stringResource(R.string.clock_center),
+                selected = selectedPosition == ClockPosition.Center,
+                onClick = { onPositionSelected(ClockPosition.Center) },
+            )
+            SelectorChip(
+                label = stringResource(R.string.clock_right),
+                selected = selectedPosition == ClockPosition.Right,
+                onClick = { onPositionSelected(ClockPosition.Right) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TitleSizeSelector(
+    selectedSize: ClockTextSize,
+    onSizeSelected: (ClockTextSize) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.timer_title_size),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SelectorChip(
+                label = stringResource(R.string.clock_size_small),
+                selected = selectedSize == ClockTextSize.Small,
+                onClick = { onSizeSelected(ClockTextSize.Small) },
+            )
+            SelectorChip(
+                label = stringResource(R.string.clock_size_medium),
+                selected = selectedSize == ClockTextSize.Medium,
+                onClick = { onSizeSelected(ClockTextSize.Medium) },
+            )
+            SelectorChip(
+                label = stringResource(R.string.clock_size_large),
+                selected = selectedSize == ClockTextSize.Large,
+                onClick = { onSizeSelected(ClockTextSize.Large) },
+            )
+        }
+    }
+}
+
+@Composable
 private fun ThemeModeSelector(
     selectedMode: ThemeMode,
     onModeSelected: (ThemeMode) -> Unit,
@@ -1452,3 +1556,31 @@ private fun clockTextStyle(clockTextSize: ClockTextSize, isLandscape: Boolean) =
         ClockTextSize.Medium -> if (isLandscape) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineLarge
         ClockTextSize.Large -> if (isLandscape) MaterialTheme.typography.displayMedium else MaterialTheme.typography.displaySmall
     }
+
+@Composable
+private fun TimerTitleDisplay(
+    state: TimerState,
+    isCleanModeActive: Boolean,
+    minimalUiAlpha: Float,
+) {
+    if (!state.timerTitleEnabled || state.activeTimerName.isBlank()) return
+    val alpha = if (isCleanModeActive && state.timerTitleHideInCleanMode) minimalUiAlpha else 1f
+    Text(
+        text = state.activeTimerName,
+        style = when (state.timerTitleSize) {
+            ClockTextSize.Small -> MaterialTheme.typography.labelLarge
+            ClockTextSize.Medium -> MaterialTheme.typography.titleMedium
+            ClockTextSize.Large -> MaterialTheme.typography.titleLarge
+        },
+        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.82f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(alpha),
+        textAlign = when (state.timerTitlePosition) {
+            ClockPosition.Left -> TextAlign.Start
+            ClockPosition.Center -> TextAlign.Center
+            ClockPosition.Right -> TextAlign.End
+        },
+        maxLines = 1,
+    )
+}

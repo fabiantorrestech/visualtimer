@@ -21,6 +21,10 @@ sealed interface TimerAction {
     data class SetClockwiseModeEnabled(val enabled: Boolean) : TimerAction
     data class SetCleanModeEnabled(val enabled: Boolean) : TimerAction
     data class SetHideClockInCleanMode(val enabled: Boolean) : TimerAction
+    data class SetTimerTitleEnabled(val enabled: Boolean) : TimerAction
+    data class SetTimerTitleHideInCleanMode(val enabled: Boolean) : TimerAction
+    data class SetTimerTitlePosition(val position: ClockPosition) : TimerAction
+    data class SetTimerTitleSize(val size: ClockTextSize) : TimerAction
     data class SetThemeMode(val mode: ThemeMode) : TimerAction
     data class SetActiveTimerName(val name: String) : TimerAction
     data class SetActivePresetId(val id: Long?) : TimerAction
