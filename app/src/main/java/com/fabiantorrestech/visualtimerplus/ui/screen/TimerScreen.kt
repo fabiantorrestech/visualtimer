@@ -805,7 +805,7 @@ private fun HeroTimerCard(
         Surface(
             onClick = onCenterTap,
             color = androidx.compose.ui.graphics.Color.Transparent,
-            modifier = Modifier.size(120.dp),
+            modifier = Modifier.width(240.dp).height(120.dp),
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -817,6 +817,8 @@ private fun HeroTimerCard(
                     style = MaterialTheme.typography.displaySmall,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    softWrap = false,
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
@@ -824,6 +826,8 @@ private fun HeroTimerCard(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.alpha(displayAlpha),
+                    maxLines = 1,
+                    softWrap = false,
                 )
             }
         }
