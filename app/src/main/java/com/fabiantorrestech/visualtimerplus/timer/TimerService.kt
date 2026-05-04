@@ -269,19 +269,26 @@ class TimerService : Service() {
                 else -> AudioManager.STREAM_NOTIFICATION
             }
             if (audioManager != null) {
-                val maxVol = audioManager.getStreamMaxVolume(streamType)
-                val rawVol = (maxVol * state.finishedSoundVolumePercent / 100f).toInt()
-                // overrideMutedSystemVolume ensures volume is ≥1 even when system is muted
-                val targetVol = if (state.overrideMutedSystemVolume) rawVol.coerceAtLeast(1) else rawVol
-                savedStreamVolume = audioManager.getStreamVolume(streamType)
-                savedStreamType = streamType
-                audioManager.setStreamVolume(streamType, targetVol, 0)
+                try {
+                    val maxVol = audioManager.getStreamMaxVolume(streamType)
+                    val rawVol = (maxVol * state.finishedSoundVolumePercent / 100f).toInt()
+                    // overrideMutedSystemVolume ensures volume is ≥1 even when system is muted
+                    val targetVol = if (state.overrideMutedSystemVolume) rawVol.coerceAtLeast(1) else rawVol
+                    savedStreamVolume = audioManager.getStreamVolume(streamType)
+                    savedStreamType = streamType
+                    audioManager.setStreamVolume(streamType, targetVol, 0)
+                } catch (_: SecurityException) {
+                    // DnD policy can block setStreamVolume — skip volume override, continue to sound/vibration
+                }
             }
-            val soundUri = when (state.finishedSoundRoute) {
-                FinishedSoundRoute.Alarm -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                else -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            // ignoreSilentMode routes through STREAM_ALARM and plays the alarm ringtone
+            val soundUri = when {
+                state.ignoreSilentMode || state.finishedSoundRoute == FinishedSoundRoute.Alarm ->
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                else ->
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
             }
             finishTone = RingtoneManager.getRingtone(applicationContext, soundUri)?.also { ringtone ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
