@@ -5,6 +5,9 @@
 /captures/
 /.idea/
 *.iml
-/.codex
-/.claude
+/.codex/
+/.claude/
+/.gemini/
+/handoffContext/
+/docs/
 
