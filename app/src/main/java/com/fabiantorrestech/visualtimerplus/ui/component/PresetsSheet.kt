@@ -61,7 +61,6 @@ import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.db.PresetEntity
 import com.fabiantorrestech.visualtimerplus.db.PresetFolderEntity
 import com.fabiantorrestech.visualtimerplus.timer.ClockPosition
-import com.fabiantorrestech.visualtimerplus.timer.ClockTextSize
 import com.fabiantorrestech.visualtimerplus.timer.FinishedVibrationMode
 import com.fabiantorrestech.visualtimerplus.timer.TimerAction
 import com.fabiantorrestech.visualtimerplus.util.formatClockTime
@@ -983,18 +982,18 @@ private fun NullableClockSizeSelector(
             )
             FolderChip(
                 label = stringResource(R.string.clock_size_small),
-                selected = value == ClockTextSize.Small.name,
-                onClick = { onChange(ClockTextSize.Small.name) },
+                selected = value == "Small",
+                onClick = { onChange("Small") },
             )
             FolderChip(
                 label = stringResource(R.string.clock_size_medium),
-                selected = value == ClockTextSize.Medium.name,
-                onClick = { onChange(ClockTextSize.Medium.name) },
+                selected = value == "Medium",
+                onClick = { onChange("Medium") },
             )
             FolderChip(
                 label = stringResource(R.string.clock_size_large),
-                selected = value == ClockTextSize.Large.name,
-                onClick = { onChange(ClockTextSize.Large.name) },
+                selected = value == "Large",
+                onClick = { onChange("Large") },
             )
         }
     }

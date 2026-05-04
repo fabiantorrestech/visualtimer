@@ -17,10 +17,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -57,11 +60,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fabiantorrestech.visualtimerplus.R
 import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.timer.ClockPosition
-import com.fabiantorrestech.visualtimerplus.timer.ClockTextSize
 import com.fabiantorrestech.visualtimerplus.timer.FinishedSoundRoute
 import com.fabiantorrestech.visualtimerplus.timer.FinishedVibrationMode
 import com.fabiantorrestech.visualtimerplus.timer.ThemeMode
@@ -386,14 +389,16 @@ private fun PortraitLayout(
                 CurrentTimeText(
                     showSeconds = state.showClockSecondsEnabled,
                     clockPosition = state.clockPosition,
-                    clockTextSize = state.clockTextSize,
-                    isLandscape = false,
+                    clockTextSizeSp = state.clockTextSizeSp,
+
                 )
             }
-            Spacer(modifier = Modifier.height(4.dp))
-        } else {
-            Spacer(modifier = Modifier.height(16.dp))
         }
+
+        val showTitle = state.timerTitleEnabled && state.activeTimerName.isNotBlank()
+        if (showTopClock && showTitle) Spacer(modifier = Modifier.height(6.dp))
+        else if (showTopClock || showTitle) Spacer(modifier = Modifier.height(4.dp))
+        else Spacer(modifier = Modifier.height(16.dp))
 
         TimerTitleDisplay(
             state = state,
@@ -401,7 +406,8 @@ private fun PortraitLayout(
             minimalUiAlpha = minimalUiAlpha,
         )
 
-        Spacer(modifier = Modifier.height(if (state.timerTitleEnabled && state.activeTimerName.isNotBlank()) 8.dp else 0.dp))
+        if (showTitle) Spacer(modifier = Modifier.height(8.dp))
+        else if (!showTopClock) Spacer(modifier = Modifier.height(0.dp))
 
         StatusAndLogRow(
             state = state,
@@ -547,11 +553,14 @@ private fun LandscapeLayout(
                 CurrentTimeText(
                     showSeconds = state.showClockSecondsEnabled,
                     clockPosition = state.clockPosition,
-                    clockTextSize = state.clockTextSize,
-                    isLandscape = true,
+                    clockTextSizeSp = state.clockTextSizeSp,
+
                 )
-                Spacer(modifier = Modifier.height(4.dp))
             }
+
+            val showTitleLandscape = state.timerTitleEnabled && state.activeTimerName.isNotBlank()
+            if (showTopClock && showTitleLandscape) Spacer(modifier = Modifier.height(6.dp))
+            else if (showTopClock || showTitleLandscape) Spacer(modifier = Modifier.height(4.dp))
 
             TimerTitleDisplay(
                 state = state,
@@ -559,7 +568,7 @@ private fun LandscapeLayout(
                 minimalUiAlpha = minimalUiAlpha,
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(if (showTopClock || showTitleLandscape) 8.dp else 0.dp))
 
             StatusAndLogRow(
                 state = state,
@@ -829,16 +838,17 @@ private fun HeroTimerCard(
         Surface(
             onClick = onCenterTap,
             color = androidx.compose.ui.graphics.Color.Transparent,
-            modifier = Modifier.width(240.dp).height(120.dp),
+            modifier = Modifier.wrapContentSize(),
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 Text(
                     text = state.displayMillis.formatClockTime(),
                     style = MaterialTheme.typography.displaySmall,
+                    fontSize = state.centerTimeSizeSp.sp,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -976,9 +986,12 @@ private fun SettingsSheetContent(
                         onPositionSelected = { onAction(TimerAction.SetClockPosition(it)) },
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    ClockTextSizeSelector(
-                        selectedSize = state.clockTextSize,
-                        onSizeSelected = { onAction(TimerAction.SetClockTextSize(it)) },
+                    SizeSlider(
+                        label = stringResource(R.string.clock_size),
+                        value = state.clockTextSizeSp,
+                        onValueChange = { onAction(TimerAction.SetClockTextSizeSp(it)) },
+                        valueRange = 14f..60f,
+                        defaultValue = 32f,
                     )
                 }
             }
@@ -987,6 +1000,14 @@ private fun SettingsSheetContent(
         Spacer(modifier = Modifier.height(12.dp))
 
         SectionCard {
+            SizeSlider(
+                label = stringResource(R.string.center_time_size),
+                value = state.centerTimeSizeSp,
+                onValueChange = { onAction(TimerAction.SetCenterTimeSizeSp(it)) },
+                valueRange = 20f..80f,
+                defaultValue = 36f,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
             PreferenceToggle(
                 label = stringResource(R.string.clockwise_mode),
                 checked = state.clockwiseModeEnabled,
@@ -1025,9 +1046,12 @@ private fun SettingsSheetContent(
                     onPositionSelected = { onAction(TimerAction.SetTimerTitlePosition(it)) },
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                TitleSizeSelector(
-                    selectedSize = state.timerTitleSize,
-                    onSizeSelected = { onAction(TimerAction.SetTimerTitleSize(it)) },
+                SizeSlider(
+                    label = stringResource(R.string.timer_title_size),
+                    value = state.timerTitleTextSizeSp,
+                    onValueChange = { onAction(TimerAction.SetTimerTitleTextSizeSp(it)) },
+                    valueRange = 10f..48f,
+                    defaultValue = 16f,
                 )
                 if (state.cleanModeEnabled) {
                     Spacer(modifier = Modifier.height(12.dp))
@@ -1287,36 +1311,6 @@ private fun ClockPositionSelector(
     }
 }
 
-@Composable
-private fun ClockTextSizeSelector(
-    selectedSize: ClockTextSize,
-    onSizeSelected: (ClockTextSize) -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.clock_size),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SelectorChip(
-                label = stringResource(R.string.clock_size_small),
-                selected = selectedSize == ClockTextSize.Small,
-                onClick = { onSizeSelected(ClockTextSize.Small) },
-            )
-            SelectorChip(
-                label = stringResource(R.string.clock_size_medium),
-                selected = selectedSize == ClockTextSize.Medium,
-                onClick = { onSizeSelected(ClockTextSize.Medium) },
-            )
-            SelectorChip(
-                label = stringResource(R.string.clock_size_large),
-                selected = selectedSize == ClockTextSize.Large,
-                onClick = { onSizeSelected(ClockTextSize.Large) },
-            )
-        }
-    }
-}
 
 @Composable
 private fun TitlePositionSelector(
@@ -1350,32 +1344,44 @@ private fun TitlePositionSelector(
 }
 
 @Composable
-private fun TitleSizeSelector(
-    selectedSize: ClockTextSize,
-    onSizeSelected: (ClockTextSize) -> Unit,
+private fun SizeSlider(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    defaultValue: Float,
 ) {
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.timer_title_size),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SelectorChip(
-                label = stringResource(R.string.clock_size_small),
-                selected = selectedSize == ClockTextSize.Small,
-                onClick = { onSizeSelected(ClockTextSize.Small) },
+    val defaultFraction = ((defaultValue - valueRange.start) / (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
+    val primaryColor = MaterialTheme.colorScheme.primary
+
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(text = "${value.roundToInt()}sp", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Slider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = valueRange,
+                modifier = Modifier.fillMaxWidth(),
             )
-            SelectorChip(
-                label = stringResource(R.string.clock_size_medium),
-                selected = selectedSize == ClockTextSize.Medium,
-                onClick = { onSizeSelected(ClockTextSize.Medium) },
-            )
-            SelectorChip(
-                label = stringResource(R.string.clock_size_large),
-                selected = selectedSize == ClockTextSize.Large,
-                onClick = { onSizeSelected(ClockTextSize.Large) },
-            )
+            // Default position marker drawn over the slider track
+            Canvas(modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                val thumbRadius = 10.dp.toPx()
+                val markerX = thumbRadius + defaultFraction * (size.width - 2 * thumbRadius)
+                val centerY = size.height / 2f
+                drawLine(
+                    color = primaryColor.copy(alpha = 0.55f),
+                    start = Offset(markerX, centerY - 14.dp.toPx()),
+                    end = Offset(markerX, centerY + 14.dp.toPx()),
+                    strokeWidth = 2.dp.toPx(),
+                )
+            }
         }
     }
 }
@@ -1511,8 +1517,7 @@ private fun InfoBadge(
 private fun CurrentTimeText(
     showSeconds: Boolean,
     clockPosition: ClockPosition,
-    clockTextSize: ClockTextSize,
-    isLandscape: Boolean,
+    clockTextSizeSp: Float,
 ) {
     val formatter = if (showSeconds) {
         rememberClockFormatter("h:mm:ss a")
@@ -1532,12 +1537,10 @@ private fun CurrentTimeText(
 
     Text(
         text = currentTimeText,
-        style = clockTextStyle(clockTextSize = clockTextSize, isLandscape = isLandscape),
+        style = MaterialTheme.typography.headlineLarge,
+        fontSize = clockTextSizeSp.sp,
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.76f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(top = if (isLandscape) 8.dp else 34.dp),
+        modifier = Modifier.fillMaxWidth(),
         textAlign = when (clockPosition) {
             ClockPosition.Left -> TextAlign.Start
             ClockPosition.Center -> TextAlign.Center
@@ -1549,13 +1552,6 @@ private fun CurrentTimeText(
 private fun rememberClockFormatter(pattern: String): DateTimeFormatter =
     DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
 
-@Composable
-private fun clockTextStyle(clockTextSize: ClockTextSize, isLandscape: Boolean) =
-    when (clockTextSize) {
-        ClockTextSize.Small -> if (isLandscape) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineMedium
-        ClockTextSize.Medium -> if (isLandscape) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineLarge
-        ClockTextSize.Large -> if (isLandscape) MaterialTheme.typography.displayMedium else MaterialTheme.typography.displaySmall
-    }
 
 @Composable
 private fun TimerTitleDisplay(
@@ -1567,11 +1563,8 @@ private fun TimerTitleDisplay(
     val alpha = if (isCleanModeActive && state.timerTitleHideInCleanMode) minimalUiAlpha else 1f
     Text(
         text = state.activeTimerName,
-        style = when (state.timerTitleSize) {
-            ClockTextSize.Small -> MaterialTheme.typography.labelLarge
-            ClockTextSize.Medium -> MaterialTheme.typography.titleMedium
-            ClockTextSize.Large -> MaterialTheme.typography.titleLarge
-        },
+        style = MaterialTheme.typography.titleMedium,
+        fontSize = state.timerTitleTextSizeSp.sp,
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.82f),
         modifier = Modifier
             .fillMaxWidth()

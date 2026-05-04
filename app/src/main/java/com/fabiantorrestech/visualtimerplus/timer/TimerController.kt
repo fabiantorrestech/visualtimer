@@ -168,8 +168,8 @@ class TimerController(context: Context) {
                 TimerRepository.update { state -> state.copy(clockPosition = action.position) }
             }
 
-            is TimerAction.SetClockTextSize -> {
-                TimerRepository.update { state -> state.copy(clockTextSize = action.size) }
+            is TimerAction.SetClockTextSizeSp -> {
+                TimerRepository.update { state -> state.copy(clockTextSizeSp = action.sp.coerceIn(14f, 60f)) }
             }
 
             is TimerAction.SetClockwiseModeEnabled -> {
@@ -196,8 +196,12 @@ class TimerController(context: Context) {
                 TimerRepository.update { state -> state.copy(timerTitlePosition = action.position) }
             }
 
-            is TimerAction.SetTimerTitleSize -> {
-                TimerRepository.update { state -> state.copy(timerTitleSize = action.size) }
+            is TimerAction.SetTimerTitleTextSizeSp -> {
+                TimerRepository.update { state -> state.copy(timerTitleTextSizeSp = action.sp.coerceIn(10f, 48f)) }
+            }
+
+            is TimerAction.SetCenterTimeSizeSp -> {
+                TimerRepository.update { state -> state.copy(centerTimeSizeSp = action.sp.coerceIn(20f, 80f)) }
             }
 
             is TimerAction.SetThemeMode -> {

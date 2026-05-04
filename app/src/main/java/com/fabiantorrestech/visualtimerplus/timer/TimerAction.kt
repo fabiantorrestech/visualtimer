@@ -17,14 +17,15 @@ sealed interface TimerAction {
     data class SetShowCurrentTimeEnabled(val enabled: Boolean) : TimerAction
     data class SetShowClockSecondsEnabled(val enabled: Boolean) : TimerAction
     data class SetClockPosition(val position: ClockPosition) : TimerAction
-    data class SetClockTextSize(val size: ClockTextSize) : TimerAction
+    data class SetClockTextSizeSp(val sp: Float) : TimerAction
     data class SetClockwiseModeEnabled(val enabled: Boolean) : TimerAction
     data class SetCleanModeEnabled(val enabled: Boolean) : TimerAction
     data class SetHideClockInCleanMode(val enabled: Boolean) : TimerAction
     data class SetTimerTitleEnabled(val enabled: Boolean) : TimerAction
     data class SetTimerTitleHideInCleanMode(val enabled: Boolean) : TimerAction
     data class SetTimerTitlePosition(val position: ClockPosition) : TimerAction
-    data class SetTimerTitleSize(val size: ClockTextSize) : TimerAction
+    data class SetTimerTitleTextSizeSp(val sp: Float) : TimerAction
+    data class SetCenterTimeSizeSp(val sp: Float) : TimerAction
     data class SetThemeMode(val mode: ThemeMode) : TimerAction
     data class SetActiveTimerName(val name: String) : TimerAction
     data class SetActivePresetId(val id: Long?) : TimerAction

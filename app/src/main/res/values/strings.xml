@@ -56,6 +56,7 @@
     <string name="timer_title_hide_in_clean_mode">Hide in minimal mode</string>
     <string name="timer_title_position">Title position</string>
     <string name="timer_title_size">Title size</string>
+    <string name="center_time_size">Timer display size</string>
     <string name="settings">Settings</string>
     <string name="settings_title">Timer settings</string>
     <string name="adjust_timer">Adjust timer</string>

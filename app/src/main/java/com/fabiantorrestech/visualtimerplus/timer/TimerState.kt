@@ -42,14 +42,15 @@ data class TimerState(
     val showCurrentTimeEnabled: Boolean = false,
     val showClockSecondsEnabled: Boolean = false,
     val clockPosition: ClockPosition = ClockPosition.Left,
-    val clockTextSize: ClockTextSize = ClockTextSize.Medium,
+    val clockTextSizeSp: Float = 32f,
     val clockwiseModeEnabled: Boolean = true,
     val cleanModeEnabled: Boolean = false,
     val hideClockInCleanMode: Boolean = false,
+    val centerTimeSizeSp: Float = 36f,
     val timerTitleEnabled: Boolean = false,
     val timerTitleHideInCleanMode: Boolean = false,
     val timerTitlePosition: ClockPosition = ClockPosition.Center,
-    val timerTitleSize: ClockTextSize = ClockTextSize.Medium,
+    val timerTitleTextSizeSp: Float = 16f,
     val themeMode: ThemeMode = ThemeMode.System,
     val originalDurationMillis: Long = 0L,
     val activeTimerName: String = "",
@@ -86,11 +87,6 @@ enum class ClockPosition {
     Right,
 }
 
-enum class ClockTextSize {
-    Small,
-    Medium,
-    Large,
-}
 
 fun clampDuration(durationMillis: Long): Long = durationMillis.coerceIn(0L, MAX_DURATION_MILLIS)
 

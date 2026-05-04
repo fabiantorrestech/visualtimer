@@ -28,14 +28,15 @@ object TimerRepository {
     private const val KEY_SHOW_CURRENT_TIME_ENABLED = "show_current_time_enabled"
     private const val KEY_SHOW_CLOCK_SECONDS_ENABLED = "show_clock_seconds_enabled"
     private const val KEY_CLOCK_POSITION = "clock_position"
-    private const val KEY_CLOCK_TEXT_SIZE = "clock_text_size"
+    private const val KEY_CLOCK_TEXT_SIZE_SP = "clock_text_size_sp"
     private const val KEY_CLOCKWISE_MODE_ENABLED = "clockwise_mode_enabled"
     private const val KEY_CLEAN_MODE_ENABLED = "clean_mode_enabled"
     private const val KEY_HIDE_CLOCK_IN_CLEAN_MODE = "hide_clock_in_clean_mode"
     private const val KEY_TIMER_TITLE_ENABLED = "timer_title_enabled"
     private const val KEY_TIMER_TITLE_HIDE_IN_CLEAN_MODE = "timer_title_hide_in_clean_mode"
     private const val KEY_TIMER_TITLE_POSITION = "timer_title_position"
-    private const val KEY_TIMER_TITLE_SIZE = "timer_title_size"
+    private const val KEY_TIMER_TITLE_TEXT_SIZE_SP = "timer_title_text_size_sp"
+    private const val KEY_CENTER_TIME_SIZE_SP = "center_time_size_sp"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_ORIGINAL_DURATION = "original_duration"
     private const val KEY_ACTIVE_TIMER_NAME = "active_timer_name"
@@ -107,10 +108,7 @@ object TimerRepository {
             ?: ClockPosition.Left.name
         val clockPosition = ClockPosition.entries.firstOrNull { it.name == clockPositionName }
             ?: ClockPosition.Left
-        val clockTextSizeName = preferences.getString(KEY_CLOCK_TEXT_SIZE, ClockTextSize.Medium.name)
-            ?: ClockTextSize.Medium.name
-        val clockTextSize = ClockTextSize.entries.firstOrNull { it.name == clockTextSizeName }
-            ?: ClockTextSize.Medium
+        val clockTextSizeSp = preferences.getFloat(KEY_CLOCK_TEXT_SIZE_SP, 32f).coerceIn(14f, 60f)
         val finishedVibrationMode = preferences.getString(KEY_FINISHED_VIBRATION_MODE, null)
             ?.let { modeName -> FinishedVibrationMode.entries.firstOrNull { it.name == modeName } }
             ?: if (preferences.getBoolean(KEY_VIBRATION_ENABLED, true)) {
@@ -145,7 +143,7 @@ object TimerRepository {
             showCurrentTimeEnabled = preferences.getBoolean(KEY_SHOW_CURRENT_TIME_ENABLED, false),
             showClockSecondsEnabled = preferences.getBoolean(KEY_SHOW_CLOCK_SECONDS_ENABLED, false),
             clockPosition = clockPosition,
-            clockTextSize = clockTextSize,
+            clockTextSizeSp = clockTextSizeSp,
             clockwiseModeEnabled = preferences.getBoolean(KEY_CLOCKWISE_MODE_ENABLED, true),
             cleanModeEnabled = preferences.getBoolean(KEY_CLEAN_MODE_ENABLED, false),
             hideClockInCleanMode = preferences.getBoolean(KEY_HIDE_CLOCK_IN_CLEAN_MODE, false),
@@ -154,9 +152,8 @@ object TimerRepository {
             timerTitlePosition = ClockPosition.entries.firstOrNull {
                 it.name == preferences.getString(KEY_TIMER_TITLE_POSITION, ClockPosition.Center.name)
             } ?: ClockPosition.Center,
-            timerTitleSize = ClockTextSize.entries.firstOrNull {
-                it.name == preferences.getString(KEY_TIMER_TITLE_SIZE, ClockTextSize.Medium.name)
-            } ?: ClockTextSize.Medium,
+            centerTimeSizeSp = preferences.getFloat(KEY_CENTER_TIME_SIZE_SP, 36f).coerceIn(20f, 80f),
+            timerTitleTextSizeSp = preferences.getFloat(KEY_TIMER_TITLE_TEXT_SIZE_SP, 16f).coerceIn(10f, 48f),
             themeMode = ThemeMode.entries.firstOrNull {
                 it.name == preferences.getString(KEY_THEME_MODE, ThemeMode.System.name)
             } ?: ThemeMode.System,
@@ -187,14 +184,15 @@ object TimerRepository {
             .putBoolean(KEY_SHOW_CURRENT_TIME_ENABLED, state.showCurrentTimeEnabled)
             .putBoolean(KEY_SHOW_CLOCK_SECONDS_ENABLED, state.showClockSecondsEnabled)
             .putString(KEY_CLOCK_POSITION, state.clockPosition.name)
-            .putString(KEY_CLOCK_TEXT_SIZE, state.clockTextSize.name)
+            .putFloat(KEY_CLOCK_TEXT_SIZE_SP, state.clockTextSizeSp)
             .putBoolean(KEY_CLOCKWISE_MODE_ENABLED, state.clockwiseModeEnabled)
             .putBoolean(KEY_CLEAN_MODE_ENABLED, state.cleanModeEnabled)
             .putBoolean(KEY_HIDE_CLOCK_IN_CLEAN_MODE, state.hideClockInCleanMode)
             .putBoolean(KEY_TIMER_TITLE_ENABLED, state.timerTitleEnabled)
             .putBoolean(KEY_TIMER_TITLE_HIDE_IN_CLEAN_MODE, state.timerTitleHideInCleanMode)
             .putString(KEY_TIMER_TITLE_POSITION, state.timerTitlePosition.name)
-            .putString(KEY_TIMER_TITLE_SIZE, state.timerTitleSize.name)
+            .putFloat(KEY_TIMER_TITLE_TEXT_SIZE_SP, state.timerTitleTextSizeSp)
+            .putFloat(KEY_CENTER_TIME_SIZE_SP, state.centerTimeSizeSp)
             .putString(KEY_THEME_MODE, state.themeMode.name)
             .putLong(KEY_ORIGINAL_DURATION, state.originalDurationMillis)
             .putString(KEY_ACTIVE_TIMER_NAME, state.activeTimerName)
