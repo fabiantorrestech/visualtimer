@@ -20,7 +20,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.rememberScrollState
@@ -376,7 +380,7 @@ private fun PortraitLayout(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
+            .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
             .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -521,7 +525,7 @@ private fun LandscapeLayout(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
+            .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -847,8 +851,10 @@ private fun HeroTimerCard(
             ) {
                 Text(
                     text = state.displayMillis.formatClockTime(),
-                    style = MaterialTheme.typography.displaySmall,
-                    fontSize = state.centerTimeSizeSp.sp,
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        fontSize = state.centerTimeSizeSp.sp,
+                        lineHeight = (state.centerTimeSizeSp * 1.2f).sp,
+                    ),
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -1537,8 +1543,10 @@ private fun CurrentTimeText(
 
     Text(
         text = currentTimeText,
-        style = MaterialTheme.typography.headlineLarge,
-        fontSize = clockTextSizeSp.sp,
+        style = MaterialTheme.typography.headlineLarge.copy(
+            fontSize = clockTextSizeSp.sp,
+            lineHeight = (clockTextSizeSp * 1.2f).sp,
+        ),
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.76f),
         modifier = Modifier.fillMaxWidth(),
         textAlign = when (clockPosition) {
@@ -1563,8 +1571,10 @@ private fun TimerTitleDisplay(
     val alpha = if (isCleanModeActive && state.timerTitleHideInCleanMode) minimalUiAlpha else 1f
     Text(
         text = state.activeTimerName,
-        style = MaterialTheme.typography.titleMedium,
-        fontSize = state.timerTitleTextSizeSp.sp,
+        style = MaterialTheme.typography.titleMedium.copy(
+            fontSize = state.timerTitleTextSizeSp.sp,
+            lineHeight = (state.timerTitleTextSizeSp * 1.25f).sp,
+        ),
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.82f),
         modifier = Modifier
             .fillMaxWidth()
@@ -1574,6 +1584,5 @@ private fun TimerTitleDisplay(
             ClockPosition.Center -> TextAlign.Center
             ClockPosition.Right -> TextAlign.End
         },
-        maxLines = 1,
     )
 }
