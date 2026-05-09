@@ -214,6 +214,18 @@ private fun LogEntryCard(entry: TimerLogEntity) {
                         value = entry.adjustedDurationMillis.formatClockTime(),
                     )
                 }
+                if (entry.timeToDismissMillis > 0L) {
+                    LabeledValue(
+                        label = stringResource(R.string.log_time_to_dismiss),
+                        value = entry.timeToDismissMillis.formatClockTime(),
+                    )
+                }
+                if (entry.cumulativeDurationMillis != null) {
+                    LabeledValue(
+                        label = stringResource(R.string.log_cumulative),
+                        value = entry.cumulativeDurationMillis.formatClockTime(),
+                    )
+                }
                 if (entry.endedAt != null) {
                     LabeledValue(
                         label = stringResource(R.string.log_ended),

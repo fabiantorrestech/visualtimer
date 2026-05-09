@@ -22,12 +22,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.fabiantorrestech.visualtimerplus.R
 import com.fabiantorrestech.visualtimerplus.timer.TimerAction
-import com.fabiantorrestech.visualtimerplus.timer.TimerState
+import com.fabiantorrestech.visualtimerplus.timer.TimerInstance
 import com.fabiantorrestech.visualtimerplus.timer.TimerStatus
 
 @Composable
 fun TimerControls(
-    state: TimerState,
+    timer: TimerInstance,
     onAction: (TimerAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -35,70 +35,50 @@ fun TimerControls(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        when (state.status) {
+        when (timer.status) {
             TimerStatus.Idle -> {
                 SecondaryControlButton(
-                    onClick = { onAction(TimerAction.Reset) },
-                    enabled = state.selectedDurationMillis > 0L,
+                    onClick = { onAction(TimerAction.Reset()) },
+                    enabled = timer.selectedDurationMillis > 0L,
                 ) {
-                    ControlButtonContent(
-                        iconText = "R",
-                        label = stringResource(R.string.reset),
-                    )
+                    ControlButtonContent(iconText = "R", label = stringResource(R.string.reset))
                 }
                 PrimaryControlButton(
-                    onClick = { onAction(TimerAction.Start) },
-                    enabled = state.selectedDurationMillis > 0L,
+                    onClick = { onAction(TimerAction.Start()) },
+                    enabled = timer.selectedDurationMillis > 0L,
                 ) {
                     Text(text = stringResource(R.string.start))
                 }
             }
 
             TimerStatus.Running -> {
-                SecondaryControlButton(onClick = { onAction(TimerAction.Reset) }) {
-                    ControlButtonContent(
-                        iconText = "R",
-                        label = stringResource(R.string.reset),
-                    )
+                SecondaryControlButton(onClick = { onAction(TimerAction.Reset()) }) {
+                    ControlButtonContent(iconText = "R", label = stringResource(R.string.reset))
                 }
-                PrimaryControlButton(onClick = { onAction(TimerAction.Pause) }) {
-                    ControlButtonContent(
-                        iconText = "II",
-                        label = stringResource(R.string.pause),
-                    )
+                PrimaryControlButton(onClick = { onAction(TimerAction.Pause()) }) {
+                    ControlButtonContent(iconText = "II", label = stringResource(R.string.pause))
                 }
             }
 
             TimerStatus.Paused -> {
-                SecondaryControlButton(onClick = { onAction(TimerAction.Reset) }) {
-                    ControlButtonContent(
-                        iconText = "R",
-                        label = stringResource(R.string.reset),
-                    )
+                SecondaryControlButton(onClick = { onAction(TimerAction.Reset()) }) {
+                    ControlButtonContent(iconText = "R", label = stringResource(R.string.reset))
                 }
-                PrimaryControlButton(onClick = { onAction(TimerAction.Resume) }) {
-                    ControlButtonContent(
-                        iconText = ">",
-                        label = stringResource(R.string.resume),
-                    )
+                PrimaryControlButton(onClick = { onAction(TimerAction.Resume()) }) {
+                    ControlButtonContent(iconText = ">", label = stringResource(R.string.resume))
                 }
             }
 
+            TimerStatus.Overtime,
             TimerStatus.Finished -> {
-                SecondaryControlButton(onClick = { onAction(TimerAction.DismissFinished) }) {
-                    ControlButtonContent(
-                        iconText = "X",
-                        label = stringResource(R.string.dismiss),
-                    )
+                SecondaryControlButton(onClick = { onAction(TimerAction.DismissFinished()) }) {
+                    ControlButtonContent(iconText = "X", label = stringResource(R.string.dismiss))
                 }
                 PrimaryControlButton(
-                    onClick = { onAction(TimerAction.Restart) },
-                    enabled = state.originalDurationMillis > 0L,
+                    onClick = { onAction(TimerAction.Restart()) },
+                    enabled = timer.originalDurationMillis > 0L,
                 ) {
-                    ControlButtonContent(
-                        iconText = "↺",
-                        label = stringResource(R.string.restart),
-                    )
+                    ControlButtonContent(iconText = "↺", label = stringResource(R.string.restart))
                 }
             }
         }

@@ -4,7 +4,11 @@
     <string name="notification_title">Visual Timer</string>
     <string name="notification_idle">Timer ready</string>
     <string name="notification_running">%1$s remaining</string>
+    <string name="notification_approx_minutes">~%1$dm remaining</string>
+    <string name="notification_approx_minutes_seconds">~%1$dm %2$ds remaining</string>
+    <string name="notification_approx_seconds">~%1$ds remaining</string>
     <string name="notification_paused">Paused at %1$s</string>
+    <string name="notification_overtime">%1$s overtime</string>
     <string name="notification_finished">Timer finished</string>
     <string name="notification_paused_title">Timer paused</string>
     <string name="notification_finished_title">Timer finished</string>
@@ -51,12 +55,15 @@
     <string name="clockwise_mode">Clockwise mode</string>
     <string name="full_clock_mode">Full clock mode (start from full circle)</string>
     <string name="clean_mode">Minimal mode</string>
+    <string name="clean_mode_auto_dismiss_time">Minimal mode autodismiss UI time</string>
     <string name="hide_clock_in_minimal_mode">Hide clock in minimal mode</string>
     <string name="timer_title_enabled">Show timer name overlay</string>
     <string name="timer_title_hide_in_clean_mode">Hide in minimal mode</string>
     <string name="timer_title_position">Title position</string>
     <string name="timer_title_size">Title size</string>
     <string name="center_time_size">Timer display size</string>
+    <string name="show_end_time">Show end time (E: hh:mm)</string>
+    <string name="end_time_size">End time size</string>
     <string name="settings">Settings</string>
     <string name="settings_title">Timer settings</string>
     <string name="adjust_timer">Adjust timer</string>
@@ -65,6 +72,7 @@
     <string name="status_ready">Ready</string>
     <string name="status_running">Running</string>
     <string name="status_paused">Paused</string>
+    <string name="status_overtime">Overtime</string>
     <string name="status_finished">Finished</string>
     <string name="start">Start</string>
     <string name="restart">Restart</string>
@@ -82,6 +90,14 @@
     <string name="picker_invalid">Invalid time</string>
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
+    <string name="tab_duration">Duration</string>
+    <string name="tab_end_time">End time</string>
+    <string name="set_end_time">Set end time</string>
+    <string name="end_time_runs_for">Timer will run for %1$s</string>
+    <string name="end_time_error_past">Selected time is in the past</string>
+    <string name="end_time_error_limit">Exceeds 99-hour limit</string>
+    <string name="date_today">Today</string>
+    <string name="date_tomorrow">Tomorrow</string>
 
     <!-- Presets sheet -->
     <string name="presets_search">Search presets…</string>
@@ -108,6 +124,8 @@
     <string name="log_filter_last_100">Last 100</string>
     <string name="log_original">Original</string>
     <string name="log_adjusted">Adjusted</string>
+    <string name="log_time_to_dismiss">Time to dismiss</string>
+    <string name="log_cumulative">Cumulative</string>
     <string name="log_ended">Ended</string>
     <string name="log_adjusted_badge">Adjusted</string>
 
@@ -136,4 +154,33 @@
     <string name="preset_settings_off">Off</string>
     <string name="preset_settings_display">Display</string>
     <string name="preset_settings_volume_default">Volume: Default</string>
+
+    <!-- Delete timers -->
+    <string name="delete_timers">Delete timers</string>
+    <string name="delete_all_timers">Delete ALL timers</string>
+    <string name="delete_non_running_timers">Delete Non-Running Timers</string>
+    <string name="delete_all_confirm_title">Are you sure?</string>
+    <string name="delete_all_confirm_body">This will delete any currently running timers as well!</string>
+    <string name="delete_all_confirm_yes">Yes, I\'m sure!</string>
+
+    <!-- Multi-timer -->
+    <string name="add_timer">New Timer</string>
+    <string name="all_timers_title">All Timers</string>
+    <string name="all_timers_search">Search timer names…</string>
+    <string name="all_timers_no_results">No timers match your search</string>
+    <string name="finishes_at">finishes at %1$s</string>
+    <string name="default_timer_settings_title">Default settings for new timers</string>
+    <string name="current_timer_settings">Current Timer Settings</string>
+    <string name="confirm_swipe_delete">Confirm before deleting (swipe)</string>
+    <string name="tap_to_toggle_minimal_mode">Tap blank space to toggle minimal controls</string>
+    <string name="yes">Yes</string>
+    <string name="timer_delete_title">Delete \"%1$s\"?</string>
+    <string name="timer_delete_default_name">Timer %1$d</string>
+    <string name="notification_next_timer">Next timer</string>
+    <string name="notification_update_interval_label">Notification text refresh: %1$s</string>
+    <string name="notification_update_interval_seconds">every %1$ds</string>
+    <string name="notification_update_interval_minute">every 1m</string>
+    <string name="notification_mode_label">Notification style</string>
+    <string name="notification_mode_consolidated">Consolidated</string>
+    <string name="notification_mode_individual">Individual</string>
 </resources>

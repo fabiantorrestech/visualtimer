@@ -10,6 +10,8 @@ data class TimerLogEntity(
     val endedAt: Long? = null,
     val originalDurationMillis: Long,
     val adjustedDurationMillis: Long? = null,
+    val timeToDismissMillis: Long = 0L,
+    val cumulativeDurationMillis: Long? = null,
     val timerName: String,
     val presetId: Long? = null,
 )

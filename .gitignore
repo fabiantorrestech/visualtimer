@@ -1,6 +1,7 @@
 /.gradle/
 /build/
 /app/build/
+/app/release/
 /local.properties
 /captures/
 /.idea/
@@ -10,4 +11,3 @@
 /.gemini/
 /handoffContext/
 /docs/
-

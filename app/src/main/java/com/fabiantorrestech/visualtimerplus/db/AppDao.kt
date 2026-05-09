@@ -59,8 +59,19 @@ interface AppDao {
     @Insert
     suspend fun insertLogEntry(entry: TimerLogEntity): Long
 
-    @Query("UPDATE timer_log SET endedAt = :endedAt, adjustedDurationMillis = :adjustedDuration WHERE id = :id")
-    suspend fun completeLogEntry(id: Long, endedAt: Long, adjustedDuration: Long?)
+    @Query(
+        "UPDATE timer_log " +
+            "SET endedAt = :endedAt, adjustedDurationMillis = :adjustedDuration, " +
+            "timeToDismissMillis = :timeToDismissMillis, cumulativeDurationMillis = :cumulativeDurationMillis " +
+            "WHERE id = :id",
+    )
+    suspend fun completeLogEntry(
+        id: Long,
+        endedAt: Long,
+        adjustedDuration: Long?,
+        timeToDismissMillis: Long,
+        cumulativeDurationMillis: Long?,
+    )
 
     @Query("SELECT COUNT(*) FROM timer_log")
     suspend fun getLogCount(): Int

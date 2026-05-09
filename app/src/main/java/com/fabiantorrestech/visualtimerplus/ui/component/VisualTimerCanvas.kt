@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import com.fabiantorrestech.visualtimerplus.timer.DRAG_MAX_MILLIS
 import com.fabiantorrestech.visualtimerplus.timer.ONE_HOUR_MILLIS
-import com.fabiantorrestech.visualtimerplus.timer.TimerState
+import com.fabiantorrestech.visualtimerplus.timer.TimerInstance
 import com.fabiantorrestech.visualtimerplus.timer.TimerStatus
 import com.fabiantorrestech.visualtimerplus.timer.clampDuration
 import com.fabiantorrestech.visualtimerplus.timer.snapDuration
@@ -29,26 +29,24 @@ import kotlin.math.min
 
 @Composable
 fun VisualTimerCanvas(
-    state: TimerState,
+    timer: TimerInstance,
     onDurationSelected: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    isOledMode: Boolean = false,
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val displayMs = state.displayMillis
+    val displayMs = timer.displayMillis
 
     val baseArcFraction: Float
     val overlayArcFraction: Float
     val showTwoLayer: Boolean
 
-    // Full-clock mode: when running/paused, show remaining as a fraction of the total duration
-    // (single bright-red arc that starts full and drains to zero). Idle keeps the hour-based
-    // layered display so drag winding still gives visual feedback.
-    val useFullClock = state.fullClockMode && state.status != TimerStatus.Idle
+    val useFullClock = timer.settings.fullClockMode && timer.status != TimerStatus.Idle
 
     if (useFullClock) {
         showTwoLayer = false
         overlayArcFraction = 0f
-        val total = state.selectedDurationMillis.coerceAtLeast(1L)
+        val total = timer.selectedDurationMillis.coerceAtLeast(1L)
         baseArcFraction = (displayMs.toFloat() / total.toFloat()).coerceIn(0f, 1f)
     } else {
         when {
@@ -74,19 +72,19 @@ fun VisualTimerCanvas(
     var prevAngle by remember { mutableFloatStateOf(0f) }
 
     Box(
-        modifier = modifier.pointerInput(state.status, state.clockwiseModeEnabled) {
-            if (state.status == TimerStatus.Running) return@pointerInput
+        modifier = modifier.pointerInput(timer.status, timer.settings.clockwiseModeEnabled) {
+            if (timer.status != TimerStatus.Idle && timer.status != TimerStatus.Paused) return@pointerInput
             detectDragGestures(
                 onDragStart = { offset ->
                     val angle = toDirectionalAngle(
-                        offset, size.width.toFloat(), size.height.toFloat(), state.clockwiseModeEnabled,
+                        offset, size.width.toFloat(), size.height.toFloat(), timer.settings.clockwiseModeEnabled,
                     )
                     prevAngle = angle
-                    dragLap = if (state.displayMillis >= ONE_HOUR_MILLIS) 1 else 0
+                    dragLap = if (timer.displayMillis >= ONE_HOUR_MILLIS) 1 else 0
                 },
                 onDrag = { change, _ ->
                     val newAngle = toDirectionalAngle(
-                        change.position, size.width.toFloat(), size.height.toFloat(), state.clockwiseModeEnabled,
+                        change.position, size.width.toFloat(), size.height.toFloat(), timer.settings.clockwiseModeEnabled,
                     )
                     var setToZero = false
                     var setToMax = false
@@ -123,15 +121,11 @@ fun VisualTimerCanvas(
             val diameter = min(size.width, size.height)
             val center = Offset(size.width / 2f, size.height / 2f)
             val radius = diameter / 2f
-            val trackColor = if (state.isOledMode) {
-                colorScheme.background
-            } else {
-                colorScheme.secondaryContainer.copy(alpha = 0.88f)
-            }
-            val outlineColor = colorScheme.outline.copy(alpha = if (state.isOledMode) 0.28f else 0.18f)
+            val trackColor = if (isOledMode) colorScheme.background else colorScheme.secondaryContainer.copy(alpha = 0.88f)
+            val outlineColor = colorScheme.outline.copy(alpha = if (isOledMode) 0.28f else 0.18f)
             val arcTopLeft = Offset(center.x - radius, center.y - radius)
             val arcSize = Size(diameter, diameter)
-            val sweepSign = if (state.clockwiseModeEnabled) 1f else -1f
+            val sweepSign = if (timer.settings.clockwiseModeEnabled) 1f else -1f
 
             drawCircle(color = trackColor, radius = radius, center = center)
 

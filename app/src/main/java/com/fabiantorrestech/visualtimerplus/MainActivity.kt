@@ -27,7 +27,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fabiantorrestech.visualtimerplus.db.AppDatabase
+import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
 import com.fabiantorrestech.visualtimerplus.timer.ThemeMode
+import com.fabiantorrestech.visualtimerplus.timer.TimerAction
 import com.fabiantorrestech.visualtimerplus.timer.TimerController
 import com.fabiantorrestech.visualtimerplus.timer.TimerRepository
 import com.fabiantorrestech.visualtimerplus.timer.TimerStatus
@@ -41,10 +43,15 @@ sealed class AppScreen {
 }
 
 class MainActivity : ComponentActivity() {
+    private data class TimerLaunchTarget(val index: Int, val token: Long = System.nanoTime())
+
+    private val pendingTimerLaunchTarget = mutableStateOf<TimerLaunchTarget?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         TimerRepository.initialize(applicationContext)
+        pendingTimerLaunchTarget.value = extractTimerLaunchTarget(intent)
 
         setContent {
             val controller = remember { TimerController(applicationContext) }
@@ -52,6 +59,7 @@ class MainActivity : ComponentActivity() {
             val db = remember { AppDatabase.getInstance(applicationContext) }
             val lifecycleOwner = LocalLifecycleOwner.current
             var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Timer) }
+            val launchTarget = pendingTimerLaunchTarget.value
             val openPresetsOnLaunch = remember {
                 intent?.action == "com.fabiantorrestech.visualtimerplus.OPEN_PRESETS"
             }
@@ -59,9 +67,7 @@ class MainActivity : ComponentActivity() {
             val notificationPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestPermission(),
             ) { granted ->
-                if (granted) {
-                    controller.syncNotification()
-                }
+                if (granted) controller.syncNotification()
             }
 
             LaunchedEffect(shouldRequestNotifications) {
@@ -72,31 +78,27 @@ class MainActivity : ComponentActivity() {
             }
 
             DisposableEffect(lifecycleOwner) {
-                var wasInBackground = false
                 val observer = LifecycleEventObserver { _, event ->
                     when (event) {
                         Lifecycle.Event.ON_START -> TimerRepository.setAppForeground(true)
                         Lifecycle.Event.ON_STOP -> {
                             TimerRepository.setAppForeground(false)
-                            wasInBackground = true
-                            if (TimerRepository.getState().status == TimerStatus.Finished) {
+                            if (TimerRepository.getState().timers.any { it.status == TimerStatus.Finished || it.status == TimerStatus.Overtime }) {
                                 controller.syncNotification()
                             }
-                        }
-                        Lifecycle.Event.ON_RESUME -> {
-                            if (wasInBackground && TimerRepository.getState().status == TimerStatus.Finished) {
-                                controller.dismissFinishedIfActive()
-                            }
-                            wasInBackground = false
                         }
                         else -> {}
                     }
                 }
                 lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
 
-                onDispose {
-                    lifecycleOwner.lifecycle.removeObserver(observer)
-                }
+            LaunchedEffect(launchTarget?.token) {
+                val target = launchTarget ?: return@LaunchedEffect
+                currentScreen = AppScreen.Timer
+                controller.dispatch(TimerAction.SetActiveTimer(target.index))
+                pendingTimerLaunchTarget.value = null
             }
 
             DisposableEffect(uiState.keepScreenAwakeEnabled) {
@@ -105,21 +107,22 @@ class MainActivity : ComponentActivity() {
                 } else {
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 }
-
-                onDispose {
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                }
+                onDispose { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
             }
 
+            val activeTimerStatus = uiState.activeTimer.status
             DisposableEffect(
                 uiState.hideStatusBarEnabled,
                 uiState.hideStatusBarOnlyWhenRunning,
-                uiState.status,
+                activeTimerStatus,
             ) {
                 val shouldHideStatusBar = uiState.hideStatusBarEnabled &&
-                    (!uiState.hideStatusBarOnlyWhenRunning || uiState.status == TimerStatus.Running)
+                    (
+                        !uiState.hideStatusBarOnlyWhenRunning ||
+                            activeTimerStatus == TimerStatus.Running ||
+                            activeTimerStatus == TimerStatus.Overtime
+                        )
                 val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-
                 if (shouldHideStatusBar) {
                     insetsController.systemBarsBehavior =
                         WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -127,10 +130,7 @@ class MainActivity : ComponentActivity() {
                 } else {
                     insetsController.show(WindowInsetsCompat.Type.statusBars())
                 }
-
-                onDispose {
-                    insetsController.show(WindowInsetsCompat.Type.statusBars())
-                }
+                onDispose { insetsController.show(WindowInsetsCompat.Type.statusBars()) }
             }
 
             val systemDark = isSystemInDarkTheme()
@@ -145,7 +145,9 @@ class MainActivity : ComponentActivity() {
                         AppScreen.Timer -> TimerScreen(
                             stateFlow = controller.uiState,
                             onAction = controller::dispatch,
-                            onToggleOledMode = controller::setOledMode,
+                            onToggleOledMode = { enabled ->
+                                controller.dispatch(com.fabiantorrestech.visualtimerplus.timer.TimerAction.SetOledMode(enabled))
+                            },
                             onNotificationPermissionNeeded = {
                                 if (
                                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -169,5 +171,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingTimerLaunchTarget.value = extractTimerLaunchTarget(intent)
+    }
+
+    private fun extractTimerLaunchTarget(intent: android.content.Intent?): TimerLaunchTarget? {
+        val index = intent?.getIntExtra(TimerNotificationManager.EXTRA_TARGET_TIMER_INDEX, -1) ?: -1
+        return if (index >= 0) TimerLaunchTarget(index) else null
     }
 }

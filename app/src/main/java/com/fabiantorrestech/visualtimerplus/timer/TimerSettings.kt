@@ -1,0 +1,28 @@
+package com.fabiantorrestech.visualtimerplus.timer
+
+data class TimerSettings(
+    val soundEnabled: Boolean = true,
+    val finishedSoundRoute: FinishedSoundRoute = FinishedSoundRoute.Default,
+    val finishedSoundVolumePercent: Int = 100,
+    val overrideMutedSystemVolume: Boolean = false,
+    val ignoreSilentMode: Boolean = false,
+    val fullClockMode: Boolean = false,
+    val finishedVibrationMode: FinishedVibrationMode = FinishedVibrationMode.OneMinute,
+    val showCurrentTimeEnabled: Boolean = false,
+    val showClockSecondsEnabled: Boolean = false,
+    val clockPosition: ClockPosition = ClockPosition.Left,
+    val clockTextSizeSp: Float = 32f,
+    val clockwiseModeEnabled: Boolean = true,
+    val cleanModeEnabled: Boolean = false,
+    val cleanModeAutoDismissSeconds: Int = CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS,
+    val hideClockInCleanMode: Boolean = false,
+    val timerTitleEnabled: Boolean = false,
+    val timerTitleHideInCleanMode: Boolean = false,
+    val timerTitlePosition: ClockPosition = ClockPosition.Center,
+    val timerTitleTextSizeSp: Float = 16f,
+    val centerTimeSizeSp: Float = 36f,
+    val promptBeforeStart: Boolean = false,
+    val keepScreenAwake: Boolean = false,
+    val showEndTimeEnabled: Boolean = false,
+    val endTimeSizeSp: Float = 32f,
+)

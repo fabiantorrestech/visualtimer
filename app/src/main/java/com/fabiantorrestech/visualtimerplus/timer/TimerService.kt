@@ -25,9 +25,11 @@ class TimerService : Service() {
     private lateinit var db: AppDatabase
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var finishTone: Ringtone? = null
-    private var hasFinishedAlerted = false
     private var savedStreamVolume: Int = -1
     private var savedStreamType: Int = -1
+    private var lastAlertedTimerIndex: Int = -1
+    private var lastNotificationUpdateMs: Long = 0L
+
     private val replayToneRunnable = object : Runnable {
         override fun run() {
             val tone = finishTone ?: return
@@ -42,23 +44,57 @@ class TimerService : Service() {
 
     private val ticker = object : Runnable {
         override fun run() {
-            val current = TimerRepository.getState()
-            val targetEndTime = current.targetEndTimeMillis ?: return
-            val remainingMillis = clampDuration(targetEndTime - System.currentTimeMillis())
-            if (remainingMillis <= 0L) {
-                finishTimer()
-                return
+            val state = TimerRepository.getState()
+            val now = System.currentTimeMillis()
+            var hasActiveTickingTimer = false
+
+            state.timers.forEachIndexed { idx, timer ->
+                when (timer.status) {
+                    TimerStatus.Running -> {
+                        val targetEndTime = timer.targetEndTimeMillis ?: return@forEachIndexed
+                        val remainingMillis = clampDuration(targetEndTime - now)
+                        if (remainingMillis <= 0L) {
+                            enterOvertime(idx, now)
+                        } else {
+                            hasActiveTickingTimer = true
+                            TimerRepository.updateTimer(idx) { t ->
+                                t.copy(
+                                    status = TimerStatus.Running,
+                                    remainingMillis = remainingMillis,
+                                    pausedRemainingMillis = null,
+                                )
+                            }
+                        }
+                    }
+                    TimerStatus.Overtime -> {
+                        hasActiveTickingTimer = true
+                        val overtimeStartedAt = timer.overtimeStartedAtMillis ?: now
+                        val overtimeMillis = (now - overtimeStartedAt).coerceAtLeast(0L)
+                        TimerRepository.updateTimer(idx) { t ->
+                            t.copy(
+                                status = TimerStatus.Overtime,
+                                remainingMillis = overtimeMillis,
+                                targetEndTimeMillis = null,
+                                pausedRemainingMillis = null,
+                            )
+                        }
+                    }
+                    else -> Unit
+                }
             }
 
-            TimerRepository.update { state ->
-                state.copy(
-                    status = TimerStatus.Running,
-                    remainingMillis = remainingMillis,
-                    pausedRemainingMillis = null,
-                )
+            val intervalMs = state.notificationUpdateIntervalSeconds * 1000L
+            if (now - lastNotificationUpdateMs >= intervalMs) {
+                notificationManager.updateNotification(TimerRepository.getState())
+                lastNotificationUpdateMs = now
             }
-            notificationManager.updateNotification(TimerRepository.getState())
-            handler.postDelayed(this, TICK_INTERVAL_MILLIS)
+            if (
+                hasActiveTickingTimer || TimerRepository.getState().timers.any {
+                    it.status == TimerStatus.Running || it.status == TimerStatus.Overtime
+                }
+            ) {
+                handler.postDelayed(this, TICK_INTERVAL_MILLIS)
+            }
         }
     }
 
@@ -70,25 +106,38 @@ class TimerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val timerIndex = intent?.getIntExtra(EXTRA_TIMER_INDEX, -1) ?: -1
+        val resolvedIndex = if (timerIndex == -1) TimerRepository.getState().activeTimerIndex else timerIndex
+
         when (intent?.action) {
-            ACTION_START -> startTimer()
-            ACTION_PAUSE -> pauseTimer()
-            ACTION_RESUME -> resumeTimer()
-            ACTION_RESET -> resetTimer()
-            ACTION_DISMISS_FINISHED -> dismissFinished()
-            ACTION_RESTART -> restartTimer()
+            ACTION_START -> startTimer(resolvedIndex)
+            ACTION_PAUSE -> pauseTimer(resolvedIndex)
+            ACTION_RESUME -> resumeTimer(resolvedIndex)
+            ACTION_RESET -> resetTimer(resolvedIndex)
+            ACTION_DISMISS_FINISHED -> dismissFinished(resolvedIndex)
+            ACTION_RESTART -> restartTimer(resolvedIndex)
+            ACTION_ADJUST_OVERTIME -> {
+                val deltaMillis = intent.getLongExtra(EXTRA_ADJUST_DELTA_MILLIS, 0L)
+                addTimeDuringOvertime(resolvedIndex, deltaMillis)
+            }
+            TimerNotificationManager.ACTION_CYCLE_TIMER -> {
+                // Switch the active timer index so the notification updates to show the next timer
+                TimerRepository.update { state -> state.copy(activeTimerIndex = resolvedIndex) }
+                notificationManager.updateNotification(TimerRepository.getState())
+            }
             else -> {
-                when (TimerRepository.getState().status) {
-                    TimerStatus.Running -> {
-                        promoteToForeground()
+                val state = TimerRepository.getState()
+                val anyActive = state.timers.any {
+                    it.status == TimerStatus.Running ||
+                        it.status == TimerStatus.Paused ||
+                        it.status == TimerStatus.Overtime ||
+                        it.status == TimerStatus.Finished
+                }
+                if (anyActive) {
+                    promoteToForeground()
+                    if (state.timers.any { it.status == TimerStatus.Running || it.status == TimerStatus.Overtime }) {
                         scheduleTick()
                     }
-
-                    TimerStatus.Paused,
-                    TimerStatus.Finished,
-                    -> promoteToForeground()
-
-                    TimerStatus.Idle -> Unit
                 }
             }
         }
@@ -103,81 +152,86 @@ class TimerService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun startTimer() {
-        handler.removeCallbacksAndMessages(null)
-        val current = TimerRepository.getState()
-        val durationMillis = current.selectedDurationMillis
+    private fun startTimer(index: Int) {
+        val timer = TimerRepository.getTimer(index)
+        val durationMillis = timer.selectedDurationMillis
         if (durationMillis <= 0L) return
 
         val targetEndTime = System.currentTimeMillis() + durationMillis
-        hasFinishedAlerted = false
-        stopFinishedAlertEffects()
-        TimerRepository.update { state ->
-            state.copy(
+        TimerRepository.updateTimer(index) { t ->
+            t.copy(
                 status = TimerStatus.Running,
                 remainingMillis = durationMillis,
                 targetEndTimeMillis = targetEndTime,
                 pausedRemainingMillis = null,
                 originalDurationMillis = durationMillis,
+                totalAdjustmentMillis = 0L,
+                timeToDismissAccumulatedMillis = 0L,
+                overtimeStartedAtMillis = null,
             )
         }
         promoteToForeground()
         scheduleTick()
     }
 
-    private fun restartTimer() {
-        handler.removeCallbacksAndMessages(null)
-        val current = TimerRepository.getState()
-        val originalDuration = current.originalDurationMillis
+    private fun restartTimer(index: Int) {
+        val timer = TimerRepository.getTimer(index)
+        val originalDuration = timer.originalDurationMillis
         if (originalDuration <= 0L) return
 
+        completeLogEntry(index)
+        createLogEntry(index, originalDuration, timer.activeTimerName, timer.activePresetId)
+
         val targetEndTime = System.currentTimeMillis() + originalDuration
-        hasFinishedAlerted = false
-        stopFinishedAlertEffects()
-        TimerRepository.update { state ->
-            state.copy(
+        TimerRepository.updateTimer(index) { t ->
+            t.copy(
                 status = TimerStatus.Running,
                 selectedDurationMillis = originalDuration,
                 remainingMillis = originalDuration,
                 targetEndTimeMillis = targetEndTime,
                 pausedRemainingMillis = null,
                 originalDurationMillis = originalDuration,
+                totalAdjustmentMillis = 0L,
+                timeToDismissAccumulatedMillis = 0L,
+                overtimeStartedAtMillis = null,
             )
         }
         promoteToForeground()
         scheduleTick()
     }
 
-    private fun pauseTimer() {
-        val current = TimerRepository.getState()
-        if (current.status != TimerStatus.Running) return
+    private fun pauseTimer(index: Int) {
+        val timer = TimerRepository.getTimer(index)
+        if (timer.status != TimerStatus.Running) return
 
-        handler.removeCallbacksAndMessages(null)
-        val remainingMillis = current.targetEndTimeMillis
+        val remainingMillis = timer.targetEndTimeMillis
             ?.let { clampDuration(it - System.currentTimeMillis()) }
-            ?: current.remainingMillis
+            ?: timer.remainingMillis
 
-        TimerRepository.update { state ->
-            state.copy(
+        TimerRepository.updateTimer(index) { t ->
+            t.copy(
                 status = TimerStatus.Paused,
                 remainingMillis = remainingMillis,
                 pausedRemainingMillis = remainingMillis,
                 targetEndTimeMillis = null,
             )
         }
+
+        // If no more timers are running, stop the tick loop but stay in foreground
+        if (TimerRepository.getState().timers.none { it.status == TimerStatus.Running || it.status == TimerStatus.Overtime }) {
+            handler.removeCallbacks(ticker)
+        }
         promoteToForeground()
     }
 
-    private fun resumeTimer() {
-        handler.removeCallbacksAndMessages(null)
-        val current = TimerRepository.getState()
-        val remainingMillis = current.pausedRemainingMillis ?: current.remainingMillis
-        if (current.status != TimerStatus.Paused || remainingMillis <= 0L) return
+    private fun resumeTimer(index: Int) {
+        val timer = TimerRepository.getTimer(index)
+        val remainingMillis = timer.pausedRemainingMillis ?: timer.remainingMillis
+        if (timer.status != TimerStatus.Paused || remainingMillis <= 0L) return
 
-        hasFinishedAlerted = false
         val targetEndTime = System.currentTimeMillis() + remainingMillis
-        TimerRepository.update { state ->
-            state.copy(
+        TimerRepository.updateTimer(index) { t ->
+            t.copy(
                 status = TimerStatus.Running,
                 remainingMillis = remainingMillis,
                 targetEndTimeMillis = targetEndTime,
@@ -188,14 +242,14 @@ class TimerService : Service() {
         scheduleTick()
     }
 
-    private fun resetTimer() {
-        handler.removeCallbacksAndMessages(null)
-        stopFinishedAlertEffects()
-        hasFinishedAlerted = false
-        completeLogEntry()
-        val resetDuration = TimerRepository.getState().defaultDurationMillis.takeIf { it > 0L } ?: 0L
-        TimerRepository.update { state ->
-            state.copy(
+    private fun resetTimer(index: Int) {
+        completeLogEntry(index)
+        val timer = TimerRepository.getTimer(index)
+        val wasAlerted = lastAlertedTimerIndex == index
+
+        val resetDuration = timer.defaultDurationMillis.takeIf { it > 0L } ?: 0L
+        TimerRepository.updateTimer(index) { t ->
+            t.copy(
                 status = TimerStatus.Idle,
                 selectedDurationMillis = resetDuration,
                 remainingMillis = resetDuration,
@@ -204,49 +258,130 @@ class TimerService : Service() {
                 originalDurationMillis = 0L,
                 activeTimerName = "",
                 activePresetId = null,
+                activeLogEntryId = -1L,
+                totalAdjustmentMillis = 0L,
+                timeToDismissAccumulatedMillis = 0L,
+                overtimeStartedAtMillis = null,
             )
         }
-        notificationManager.cancelNotification()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+
+        if (wasAlerted) {
+            stopFinishedAlertEffects()
+            lastAlertedTimerIndex = -1
+        }
+
+        val state = TimerRepository.getState()
+        val anyActive = state.timers.any {
+            it.status == TimerStatus.Running ||
+                it.status == TimerStatus.Paused ||
+                it.status == TimerStatus.Overtime ||
+                it.status == TimerStatus.Finished
+        }
+        if (!anyActive) {
+            notificationManager.cancelNotification()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        } else {
+            notificationManager.updateNotification(state)
+        }
     }
 
-    private fun dismissFinished() {
-        if (TimerRepository.getState().status != TimerStatus.Finished) return
-        resetTimer()
+    private fun dismissFinished(index: Int) {
+        if (TimerRepository.getTimer(index).status !in setOf(TimerStatus.Finished, TimerStatus.Overtime)) return
+        resetTimer(index)
     }
 
-    private fun finishTimer() {
-        handler.removeCallbacksAndMessages(null)
-        completeLogEntry()
-        TimerRepository.update { state ->
-            state.copy(
-                status = TimerStatus.Finished,
+    private fun enterOvertime(index: Int, now: Long = System.currentTimeMillis()) {
+        TimerRepository.updateTimer(index) { t ->
+            t.copy(
+                status = TimerStatus.Overtime,
                 remainingMillis = 0L,
                 targetEndTimeMillis = null,
                 pausedRemainingMillis = null,
+                overtimeStartedAtMillis = now,
             )
         }
-        if (!hasFinishedAlerted) {
-            hasFinishedAlerted = true
-            alertFinished()
+
+        val timer = TimerRepository.getTimer(index)
+        // Latest-timer override: if a previous alert is active, stop it first
+        if (lastAlertedTimerIndex >= 0) {
+            stopFinishedAlertEffects()
         }
+        lastAlertedTimerIndex = index
+        alertFinished(timer.settings)
+
         if (!TimerRepository.isAppForeground) {
             promoteToForeground()
         }
+        notificationManager.updateNotification(TimerRepository.getState())
+        scheduleTick()
     }
 
-    private fun completeLogEntry() {
-        val logId = TimerRepository.activeLogEntryId
+    private fun addTimeDuringOvertime(index: Int, deltaMillis: Long) {
+        if (deltaMillis <= 0L) return
+        val timer = TimerRepository.getTimer(index)
+        if (timer.status != TimerStatus.Overtime) return
+
+        val now = System.currentTimeMillis()
+        val updatedTimeToDismiss = timer.timeToDismissAccumulatedMillis +
+            (now - (timer.overtimeStartedAtMillis ?: now)).coerceAtLeast(0L)
+        val updatedTotalAdjustment = timer.totalAdjustmentMillis + deltaMillis
+
+        TimerRepository.updateTimer(index) { t ->
+            t.copy(
+                status = TimerStatus.Running,
+                selectedDurationMillis = (t.originalDurationMillis + updatedTotalAdjustment).coerceAtLeast(0L),
+                remainingMillis = deltaMillis,
+                targetEndTimeMillis = now + deltaMillis,
+                pausedRemainingMillis = null,
+                totalAdjustmentMillis = updatedTotalAdjustment,
+                timeToDismissAccumulatedMillis = updatedTimeToDismiss,
+                overtimeStartedAtMillis = null,
+            )
+        }
+
+        if (lastAlertedTimerIndex == index) {
+            stopFinishedAlertEffects()
+            lastAlertedTimerIndex = -1
+        }
+
+        promoteToForeground()
+        notificationManager.updateNotification(TimerRepository.getState())
+        scheduleTick()
+    }
+
+    private fun completeLogEntry(index: Int) {
+        val timer = TimerRepository.getTimer(index)
+        val logId = timer.activeLogEntryId
         if (logId < 0L) return
-        TimerRepository.activeLogEntryId = -1L
-        val state = TimerRepository.getState()
-        val adjustedDuration = if (
-            state.originalDurationMillis > 0L &&
-            state.selectedDurationMillis != state.originalDurationMillis
-        ) state.selectedDurationMillis else null
+        TimerRepository.updateTimer(index) { t -> t.copy(activeLogEntryId = -1L) }
+        val adjustedDuration = timer.adjustedDurationMillis
+        val timeToDismissMillis = timer.timeToDismissMillis
+        val cumulativeDurationMillis = timer.cumulativeDurationMillis.takeIf { it > 0L }
         serviceScope.launch {
-            db.appDao().completeLogEntry(logId, System.currentTimeMillis(), adjustedDuration)
+            db.appDao().completeLogEntry(
+                logId,
+                System.currentTimeMillis(),
+                adjustedDuration,
+                timeToDismissMillis,
+                cumulativeDurationMillis,
+            )
+        }
+    }
+
+    private fun createLogEntry(timerIndex: Int, durationMillis: Long, timerName: String, presetId: Long?) {
+        serviceScope.launch {
+            val count = db.appDao().getLogCount()
+            if (count >= 100) db.appDao().deleteOldestLogEntry()
+            val id = db.appDao().insertLogEntry(
+                com.fabiantorrestech.visualtimerplus.db.TimerLogEntity(
+                    startedAt = System.currentTimeMillis(),
+                    originalDurationMillis = durationMillis,
+                    timerName = timerName.ifBlank { "Default" },
+                    presetId = presetId,
+                ),
+            )
+            TimerRepository.updateTimer(timerIndex) { t -> t.copy(activeLogEntryId = id) }
         }
     }
 
@@ -265,33 +400,29 @@ class TimerService : Service() {
         handler.post(ticker)
     }
 
-    private fun alertFinished() {
-        val state = TimerRepository.getState()
-        if (state.soundEnabled) {
+    private fun alertFinished(settings: TimerSettings) {
+        if (settings.soundEnabled) {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            // ignoreSilentMode forces STREAM_ALARM so the sound plays even in silent/vibrate
             val streamType = when {
-                state.ignoreSilentMode -> AudioManager.STREAM_ALARM
-                state.finishedSoundRoute == FinishedSoundRoute.Alarm -> AudioManager.STREAM_ALARM
-                state.finishedSoundRoute == FinishedSoundRoute.Media -> AudioManager.STREAM_MUSIC
+                settings.ignoreSilentMode -> AudioManager.STREAM_ALARM
+                settings.finishedSoundRoute == FinishedSoundRoute.Alarm -> AudioManager.STREAM_ALARM
+                settings.finishedSoundRoute == FinishedSoundRoute.Media -> AudioManager.STREAM_MUSIC
                 else -> AudioManager.STREAM_NOTIFICATION
             }
             if (audioManager != null) {
                 try {
                     val maxVol = audioManager.getStreamMaxVolume(streamType)
-                    val rawVol = (maxVol * state.finishedSoundVolumePercent / 100f).toInt()
-                    // overrideMutedSystemVolume ensures volume is ≥1 even when system is muted
-                    val targetVol = if (state.overrideMutedSystemVolume) rawVol.coerceAtLeast(1) else rawVol
+                    val rawVol = (maxVol * settings.finishedSoundVolumePercent / 100f).toInt()
+                    val targetVol = if (settings.overrideMutedSystemVolume) rawVol.coerceAtLeast(1) else rawVol
                     savedStreamVolume = audioManager.getStreamVolume(streamType)
                     savedStreamType = streamType
                     audioManager.setStreamVolume(streamType, targetVol, 0)
                 } catch (_: SecurityException) {
-                    // DnD policy can block setStreamVolume — skip volume override, continue to sound/vibration
+                    // DnD policy can block setStreamVolume — continue without volume override
                 }
             }
-            // ignoreSilentMode routes through STREAM_ALARM and plays the alarm ringtone
             val soundUri = when {
-                state.ignoreSilentMode || state.finishedSoundRoute == FinishedSoundRoute.Alarm ->
+                settings.ignoreSilentMode || settings.finishedSoundRoute == FinishedSoundRoute.Alarm ->
                     RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                         ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
                 else ->
@@ -301,7 +432,6 @@ class TimerService : Service() {
             finishTone = RingtoneManager.getRingtone(applicationContext, soundUri)?.also { ringtone ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     ringtone.isLooping = true
-                    // Force alarm audio attributes so Ringtone bypasses ringer/silent mode
                     if (streamType == AudioManager.STREAM_ALARM) {
                         ringtone.audioAttributes = android.media.AudioAttributes.Builder()
                             .setUsage(android.media.AudioAttributes.USAGE_ALARM)
@@ -316,9 +446,9 @@ class TimerService : Service() {
                 ringtone.play()
             }
         }
-        if (state.finishedVibrationMode != FinishedVibrationMode.Off) {
+        if (settings.finishedVibrationMode != FinishedVibrationMode.Off) {
             Haptics.startTimerFinishedVibration(applicationContext)
-            state.finishedVibrationMode.durationMillis?.let { durationMillis ->
+            settings.finishedVibrationMode.durationMillis?.let { durationMillis ->
                 handler.postDelayed(stopFinishedVibrationRunnable, durationMillis)
             }
         }
@@ -345,7 +475,11 @@ class TimerService : Service() {
         const val ACTION_RESET = "com.fabiantorrestech.visualtimerplus.action.RESET"
         const val ACTION_DISMISS_FINISHED = "com.fabiantorrestech.visualtimerplus.action.DISMISS_FINISHED"
         const val ACTION_RESTART = "com.fabiantorrestech.visualtimerplus.action.RESTART"
+        const val ACTION_ADJUST_OVERTIME = "com.fabiantorrestech.visualtimerplus.action.ADJUST_OVERTIME"
+        const val EXTRA_TIMER_INDEX = "timer_index"
+        const val EXTRA_ADJUST_DELTA_MILLIS = "adjust_delta_millis"
 
         private const val TICK_INTERVAL_MILLIS = 250L
+        // Notification refresh rate is now user-configurable; this constant is unused.
     }
 }
