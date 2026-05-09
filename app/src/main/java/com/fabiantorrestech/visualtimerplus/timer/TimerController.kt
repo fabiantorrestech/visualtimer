@@ -5,6 +5,7 @@ import android.content.Intent
 import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.db.TimerLogEntity
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
+import com.fabiantorrestech.visualtimerplus.overlay.TimerOverlayManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,6 +20,7 @@ class TimerController(context: Context) {
 
     init {
         TimerRepository.initialize(appContext)
+        TimerOverlayManager.initialize(appContext)
         val state = TimerRepository.getState()
         if (state.timers.any { it.status == TimerStatus.Running || it.status == TimerStatus.Overtime }) {
             appContext.startForegroundService(Intent(appContext, TimerService::class.java))
@@ -165,6 +167,18 @@ class TimerController(context: Context) {
                 val clamped = NOTIFICATION_UPDATE_INTERVAL_STEPS
                     .minByOrNull { kotlin.math.abs(it - action.seconds) } ?: 15
                 TimerRepository.update { state -> state.copy(notificationUpdateIntervalSeconds = clamped) }
+            }
+
+            is TimerAction.SetOverlayEnabled -> {
+                TimerRepository.update { state -> state.copy(overlayEnabled = action.enabled) }
+            }
+
+            is TimerAction.SetOverlaySize -> {
+                TimerRepository.update { state -> state.copy(overlaySize = action.size) }
+            }
+
+            is TimerAction.SetOverlayStyle -> {
+                TimerRepository.update { state -> state.copy(overlayStyle = action.style) }
             }
 
             // ── Per-timer settings ─────────────────────────────────────────────

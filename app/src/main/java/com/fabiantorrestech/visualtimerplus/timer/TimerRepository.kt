@@ -17,6 +17,9 @@ object TimerRepository {
     private const val KEY_NOTIFICATION_MODE = "notification_mode"
     private const val KEY_HIDE_PAGE_DOTS_IN_CLEAN_MODE = "hide_page_dots_in_clean_mode"
     private const val KEY_NOTIFICATION_UPDATE_INTERVAL = "notification_update_interval"
+    private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
+    private const val KEY_OVERLAY_SIZE = "overlay_size"
+    private const val KEY_OVERLAY_STYLE = "overlay_style"
 
     // ── Timer count ────────────────────────────────────────────────────────────
     private const val KEY_TIMER_COUNT = "timer_count"
@@ -161,6 +164,13 @@ object TimerRepository {
             ?.let { name -> ThemeMode.entries.firstOrNull { it.name == name } }
             ?: ThemeMode.System
 
+        val overlaySize = preferences.getString(KEY_OVERLAY_SIZE, null)
+            ?.let { name -> OverlaySize.entries.firstOrNull { it.name == name } }
+            ?: OverlaySize.Medium
+        val overlayStyle = preferences.getString(KEY_OVERLAY_STYLE, null)
+            ?.let { name -> OverlayStyle.entries.firstOrNull { it.name == name } }
+            ?: OverlayStyle.Ring
+
         return AppState(
             timers = timers,
             activeTimerIndex = activeIndex,
@@ -172,6 +182,9 @@ object TimerRepository {
             notificationMode = notificationMode,
             hidePageDotsInCleanMode = preferences.getBoolean(KEY_HIDE_PAGE_DOTS_IN_CLEAN_MODE, true),
             notificationUpdateIntervalSeconds = preferences.getInt(KEY_NOTIFICATION_UPDATE_INTERVAL, 15),
+            overlayEnabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, true),
+            overlaySize = overlaySize,
+            overlayStyle = overlayStyle,
         )
     }
 
@@ -288,6 +301,9 @@ object TimerRepository {
             .putString(KEY_NOTIFICATION_MODE, state.notificationMode.name)
             .putBoolean(KEY_HIDE_PAGE_DOTS_IN_CLEAN_MODE, state.hidePageDotsInCleanMode)
             .putInt(KEY_NOTIFICATION_UPDATE_INTERVAL, state.notificationUpdateIntervalSeconds)
+            .putBoolean(KEY_OVERLAY_ENABLED, state.overlayEnabled)
+            .putString(KEY_OVERLAY_SIZE, state.overlaySize.name)
+            .putString(KEY_OVERLAY_STYLE, state.overlayStyle.name)
             .putInt(KEY_TIMER_COUNT, state.timers.size)
             .putInt(KEY_ACTIVE_TIMER_INDEX, state.activeTimerIndex)
 

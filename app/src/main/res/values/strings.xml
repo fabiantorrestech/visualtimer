@@ -186,4 +186,15 @@
     <string name="notification_mode_label">Notification style</string>
     <string name="notification_mode_consolidated">Consolidated</string>
     <string name="notification_mode_individual">Individual</string>
+    <string name="overlay_enabled">Floating overlay</string>
+    <string name="overlay_size_label">Overlay size</string>
+    <string name="overlay_size_small">Small</string>
+    <string name="overlay_size_medium">Medium</string>
+    <string name="overlay_size_large">Large</string>
+    <string name="overlay_style_label">Overlay style</string>
+    <string name="overlay_style_ring">Style 1</string>
+    <string name="overlay_style_timer_face">Style 2</string>
+    <string name="overlay_permission_required">Overlay permission required to show the timer over other apps.</string>
+    <string name="overlay_permission_granted">Overlay permission granted.</string>
+    <string name="overlay_open_settings">Open overlay settings</string>
 </resources>

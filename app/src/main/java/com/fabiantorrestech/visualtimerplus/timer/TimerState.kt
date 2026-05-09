@@ -10,6 +10,10 @@ const val CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS = 3
 
 enum class ThemeMode { Light, Dark, System }
 
+enum class OverlaySize { Small, Medium, Large }
+
+enum class OverlayStyle { Ring, TimerFace }
+
 enum class FinishedVibrationMode(val durationMillis: Long?) {
     Off(0L),
     OneMinute(60_000L),

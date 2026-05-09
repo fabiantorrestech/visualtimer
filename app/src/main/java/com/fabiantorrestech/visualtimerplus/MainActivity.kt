@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
+import com.fabiantorrestech.visualtimerplus.overlay.TimerOverlayManager
 import com.fabiantorrestech.visualtimerplus.timer.ThemeMode
 import com.fabiantorrestech.visualtimerplus.timer.TimerAction
 import com.fabiantorrestech.visualtimerplus.timer.TimerController
@@ -51,6 +52,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         TimerRepository.initialize(applicationContext)
+        TimerRepository.setAppForeground(true)
+        TimerOverlayManager.initialize(applicationContext)
+        TimerOverlayManager.setAppForeground(true)
         pendingTimerLaunchTarget.value = extractTimerLaunchTarget(intent)
 
         setContent {
@@ -62,6 +66,9 @@ class MainActivity : ComponentActivity() {
             val launchTarget = pendingTimerLaunchTarget.value
             val openPresetsOnLaunch = remember {
                 intent?.action == "com.fabiantorrestech.visualtimerplus.OPEN_PRESETS"
+            }
+            var overlayPermissionGranted by remember {
+                mutableStateOf(TimerOverlayManager.canDrawOverlays(applicationContext))
             }
             var shouldRequestNotifications by remember { mutableStateOf(false) }
             val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -80,9 +87,17 @@ class MainActivity : ComponentActivity() {
             DisposableEffect(lifecycleOwner) {
                 val observer = LifecycleEventObserver { _, event ->
                     when (event) {
-                        Lifecycle.Event.ON_START -> TimerRepository.setAppForeground(true)
+                        Lifecycle.Event.ON_START -> {
+                            TimerRepository.setAppForeground(true)
+                            TimerOverlayManager.setAppForeground(true)
+                            overlayPermissionGranted = TimerOverlayManager.canDrawOverlays(applicationContext)
+                        }
+                        Lifecycle.Event.ON_RESUME -> {
+                            overlayPermissionGranted = TimerOverlayManager.canDrawOverlays(applicationContext)
+                        }
                         Lifecycle.Event.ON_STOP -> {
                             TimerRepository.setAppForeground(false)
+                            TimerOverlayManager.setAppForeground(false)
                             if (TimerRepository.getState().timers.any { it.status == TimerStatus.Finished || it.status == TimerStatus.Overtime }) {
                                 controller.syncNotification()
                             }
@@ -160,6 +175,10 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onOpenLog = { currentScreen = AppScreen.TimerLog },
+                            overlayPermissionGranted = overlayPermissionGranted,
+                            onOpenOverlayPermissionSettings = {
+                                startActivity(TimerOverlayManager.permissionSettingsIntent(applicationContext))
+                            },
                             db = db,
                             openPresetsOnLaunch = openPresetsOnLaunch,
                         )

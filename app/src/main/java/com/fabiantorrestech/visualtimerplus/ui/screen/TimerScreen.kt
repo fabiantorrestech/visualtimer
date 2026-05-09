@@ -96,6 +96,8 @@ import com.fabiantorrestech.visualtimerplus.timer.ClockPosition
 import com.fabiantorrestech.visualtimerplus.timer.FinishedSoundRoute
 import com.fabiantorrestech.visualtimerplus.timer.FinishedVibrationMode
 import com.fabiantorrestech.visualtimerplus.timer.NotificationMode
+import com.fabiantorrestech.visualtimerplus.timer.OverlaySize
+import com.fabiantorrestech.visualtimerplus.timer.OverlayStyle
 import com.fabiantorrestech.visualtimerplus.timer.ThemeMode
 import com.fabiantorrestech.visualtimerplus.timer.TimerAction
 import com.fabiantorrestech.visualtimerplus.timer.TimerController
@@ -125,6 +127,8 @@ fun TimerScreen(
     onToggleOledMode: (Boolean) -> Unit,
     onNotificationPermissionNeeded: () -> Unit,
     onOpenLog: () -> Unit,
+    overlayPermissionGranted: Boolean,
+    onOpenOverlayPermissionSettings: () -> Unit,
     db: AppDatabase,
     openPresetsOnLaunch: Boolean = false,
 ) {
@@ -295,6 +299,8 @@ fun TimerScreen(
                 timer = timer,
                 onAction = onAction,
                 onSetDefaultDuration = { showDefaultDurationPicker = true },
+                overlayPermissionGranted = overlayPermissionGranted,
+                onOpenOverlayPermissionSettings = onOpenOverlayPermissionSettings,
             )
         }
     }
@@ -1252,6 +1258,8 @@ private fun SettingsSheetContent(
     timer: TimerInstance,
     onAction: (TimerAction) -> Unit,
     onSetDefaultDuration: () -> Unit,
+    overlayPermissionGranted: Boolean,
+    onOpenOverlayPermissionSettings: () -> Unit,
 ) {
     val settings = timer.settings
     Column(
@@ -1292,6 +1300,44 @@ private fun SettingsSheetContent(
                 checked = appState.tapToToggleMinimalMode,
                 onCheckedChange = { onAction(TimerAction.SetTapToToggleMinimalMode(it)) },
             )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        SectionCard {
+            PreferenceToggle(
+                label = stringResource(R.string.overlay_enabled),
+                checked = appState.overlayEnabled,
+                onCheckedChange = { onAction(TimerAction.SetOverlayEnabled(it)) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OverlaySizeSelector(
+                selectedSize = appState.overlaySize,
+                onSizeSelected = { onAction(TimerAction.SetOverlaySize(it)) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OverlayStyleSelector(
+                selectedStyle = appState.overlayStyle,
+                onStyleSelected = { onAction(TimerAction.SetOverlayStyle(it)) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = if (overlayPermissionGranted) {
+                    stringResource(R.string.overlay_permission_granted)
+                } else {
+                    stringResource(R.string.overlay_permission_required)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!overlayPermissionGranted) {
+                Spacer(modifier = Modifier.height(12.dp))
+                AssistChip(
+                    onClick = onOpenOverlayPermissionSettings,
+                    label = { Text(stringResource(R.string.overlay_open_settings)) },
+                    shape = RoundedCornerShape(18.dp),
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -1879,6 +1925,57 @@ private fun NotificationModeSelector(selectedMode: NotificationMode, onModeSelec
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SelectorChip(label = stringResource(R.string.notification_mode_consolidated), selected = selectedMode == NotificationMode.Consolidated, onClick = { onModeSelected(NotificationMode.Consolidated) })
             SelectorChip(label = stringResource(R.string.notification_mode_individual), selected = selectedMode == NotificationMode.Individual, onClick = { onModeSelected(NotificationMode.Individual) })
+        }
+    }
+}
+
+@Composable
+private fun OverlaySizeSelector(selectedSize: OverlaySize, onSizeSelected: (OverlaySize) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.overlay_size_label),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SelectorChip(
+                label = stringResource(R.string.overlay_size_small),
+                selected = selectedSize == OverlaySize.Small,
+                onClick = { onSizeSelected(OverlaySize.Small) },
+            )
+            SelectorChip(
+                label = stringResource(R.string.overlay_size_medium),
+                selected = selectedSize == OverlaySize.Medium,
+                onClick = { onSizeSelected(OverlaySize.Medium) },
+            )
+            SelectorChip(
+                label = stringResource(R.string.overlay_size_large),
+                selected = selectedSize == OverlaySize.Large,
+                onClick = { onSizeSelected(OverlaySize.Large) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun OverlayStyleSelector(selectedStyle: OverlayStyle, onStyleSelected: (OverlayStyle) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.overlay_style_label),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SelectorChip(
+                label = stringResource(R.string.overlay_style_ring),
+                selected = selectedStyle == OverlayStyle.Ring,
+                onClick = { onStyleSelected(OverlayStyle.Ring) },
+            )
+            SelectorChip(
+                label = stringResource(R.string.overlay_style_timer_face),
+                selected = selectedStyle == OverlayStyle.TimerFace,
+                onClick = { onStyleSelected(OverlayStyle.TimerFace) },
+            )
         }
     }
 }

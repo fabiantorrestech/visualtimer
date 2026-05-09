@@ -19,6 +19,9 @@ data class AppState(
     val defaultDurationMillis: Long = 0L,
     val tapToToggleMinimalMode: Boolean = true,
     val notificationUpdateIntervalSeconds: Int = 15,
+    val overlayEnabled: Boolean = true,
+    val overlaySize: OverlaySize = OverlaySize.Medium,
+    val overlayStyle: OverlayStyle = OverlayStyle.Ring,
 ) {
     val activeTimer: TimerInstance
         get() = timers.getOrElse(activeTimerIndex) { timers.first() }
@@ -35,6 +38,14 @@ data class AppState(
 
     val runningTimerCount: Int
         get() = timers.count { it.status == TimerStatus.Running }
+
+    val overlayTimerIndex: Int?
+        get() = timers.indexOfFirst { it.status == TimerStatus.Running }.takeIf { it >= 0 }
+            ?: timers.indexOfFirst { it.status == TimerStatus.Overtime }.takeIf { it >= 0 }
+            ?: timers.indexOfFirst { it.status == TimerStatus.Paused }.takeIf { it >= 0 }
+
+    val overlayTimer: TimerInstance?
+        get() = overlayTimerIndex?.let { timers[it] }
 
     fun withTimer(index: Int, transform: (TimerInstance) -> TimerInstance): AppState {
         if (index !in timers.indices) return this

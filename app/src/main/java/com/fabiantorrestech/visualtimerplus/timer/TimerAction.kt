@@ -57,6 +57,9 @@ sealed interface TimerAction {
     data class SetAppDefaultDuration(val durationMillis: Long) : TimerAction
     data class SetTapToToggleMinimalMode(val enabled: Boolean) : TimerAction
     data class SetNotificationUpdateInterval(val seconds: Int) : TimerAction
+    data class SetOverlayEnabled(val enabled: Boolean) : TimerAction
+    data class SetOverlaySize(val size: OverlaySize) : TimerAction
+    data class SetOverlayStyle(val style: OverlayStyle) : TimerAction
 
     // Multi-timer management
     data object AddTimer : TimerAction

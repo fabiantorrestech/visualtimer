@@ -13,6 +13,7 @@ import android.os.Looper
 import androidx.core.app.ServiceCompat
 import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
+import com.fabiantorrestech.visualtimerplus.overlay.TimerOverlayManager
 import com.fabiantorrestech.visualtimerplus.util.Haptics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -101,6 +102,7 @@ class TimerService : Service() {
     override fun onCreate() {
         super.onCreate()
         TimerRepository.initialize(applicationContext)
+        TimerOverlayManager.initialize(applicationContext)
         notificationManager = TimerNotificationManager(applicationContext)
         db = AppDatabase.getInstance(applicationContext)
     }
