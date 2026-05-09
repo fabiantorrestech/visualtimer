@@ -180,7 +180,11 @@ fun TimerScreen(
         }
         cleanModeUiAwake = false
         cleanModeControlsExpanded = false
-        cleanModeWasActive = false
+        // If the settled page is already running in clean mode, mark as already-initialized so
+        // the initial-show flow doesn't fire just because we navigated to a running timer.
+        val settledTimer = appState.timers.getOrNull(pagerState.settledPage)
+        cleanModeWasActive = settledTimer?.settings?.cleanModeEnabled == true &&
+            (settledTimer.status == TimerStatus.Running || settledTimer.status == TimerStatus.Overtime)
     }
 
     // State → pager: when active timer changes externally (e.g. AddTimer / RemoveTimer), scroll pager.
@@ -197,12 +201,15 @@ fun TimerScreen(
         if (timer.status == TimerStatus.Running || timer.status == TimerStatus.Overtime) onNotificationPermissionNeeded()
     }
 
-    LaunchedEffect(isCleanModeActive) {
+    // pagerState.isScrollInProgress is included as a key so the effect re-evaluates when
+    // scrolling stops — this prevents a mid-swipe isCleanModeActive transition from waking
+    // the UI before the page has settled.
+    LaunchedEffect(isCleanModeActive, pagerState.isScrollInProgress) {
         if (!isCleanModeActive) {
             cleanModeUiAwake = false
             cleanModeControlsExpanded = false
             cleanModeWasActive = false
-        } else if (!cleanModeWasActive) {
+        } else if (!cleanModeWasActive && !pagerState.isScrollInProgress) {
             cleanModeWasActive = true
             cleanModeUiAwake = true
             cleanModeControlsExpanded = false
@@ -210,8 +217,8 @@ fun TimerScreen(
         }
     }
 
-    LaunchedEffect(isCleanModeActive, cleanModeActivityTick, currentPageSettings.cleanModeAutoDismissSeconds) {
-        if (!isCleanModeActive || !cleanModeUiAwake) return@LaunchedEffect
+    LaunchedEffect(isCleanModeActive, cleanModeActivityTick, currentPageSettings.cleanModeAutoDismissSeconds, currentPageSettings.cleanModeAutoDismissEnabled) {
+        if (!isCleanModeActive || !cleanModeUiAwake || !currentPageSettings.cleanModeAutoDismissEnabled) return@LaunchedEffect
         delay(currentPageSettings.cleanModeAutoDismissSeconds * 1_000L)
         cleanModeUiAwake = false
         cleanModeControlsExpanded = false
@@ -396,6 +403,7 @@ fun TimerScreen(
                         showTopClock = pageShowTopClock,
                         minimalUiAlpha = minimalUiAlpha,
                         cleanModeControlsExpanded = cleanModeControlsExpanded,
+                        cleanModeUiAwake = cleanModeUiAwake,
                         onAction = pagedOnAction,
                         onOpenSettings = { showSettingsSheet = true; awakenMinimalUi() },
                         onOpenLog = onOpenLog,
@@ -738,13 +746,22 @@ private fun PortraitLayout(
                 Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             }
         },
-    ) { innerPadding ->
+    ) { _ ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                // innerPadding is intentionally ignored — the sheet overlaps the timer card from
+                // below so the card always fills the same height and the centered timer text
+                // never shifts position when the sheet shows or hides.
+                // The fixed 164dp bottom padding reserves the sheet-peek area so the timer card
+                // is always sized to the visible region and appears visually centered.
+                .windowInsetsPadding(
+                    WindowInsets.statusBars
+                        .union(WindowInsets.displayCutout)
+                        .union(WindowInsets.navigationBars),
+                )
+                .padding(horizontal = 20.dp)
+                .padding(top = 16.dp, bottom = 164.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (showTopClock) {
@@ -768,22 +785,16 @@ private fun PortraitLayout(
                     timer = timer,
                     clockPosition = settings.clockPosition,
                     textSizeSp = settings.endTimeSizeSp,
+                    showSeconds = settings.showEndTimeSecondsEnabled,
                     modifier = Modifier.alpha(
                         if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f,
                     ),
                 )
             }
 
-            val showTitle = settings.timerTitleEnabled && timer.activeTimerName.isNotBlank()
             val showAnyTopRow = showTopClock || showEndTime
-            if (showAnyTopRow && showTitle) Spacer(modifier = Modifier.height(6.dp))
-            else if (showAnyTopRow || showTitle) Spacer(modifier = Modifier.height(4.dp))
+            if (showAnyTopRow) Spacer(modifier = Modifier.height(4.dp))
             else Spacer(modifier = Modifier.height(16.dp))
-
-            TimerTitleDisplay(timer = timer, isCleanModeActive = isCleanModeActive, minimalUiAlpha = minimalUiAlpha)
-
-            if (showTitle) Spacer(modifier = Modifier.height(8.dp))
-            else if (!showTopClock) Spacer(modifier = Modifier.height(0.dp))
 
             StatusAndLogRow(
                 timer = timer,
@@ -812,6 +823,9 @@ private fun PortraitLayout(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 isOledMode = appState.isOledMode,
             )
+
+            // Label below the timer card; the bottom sheet slides up and covers it.
+            TimerTitleDisplay(timer = timer, isCleanModeActive = isCleanModeActive, minimalUiAlpha = minimalUiAlpha)
         }
     }
 }
@@ -824,6 +838,7 @@ private fun LandscapeLayout(
     showTopClock: Boolean,
     minimalUiAlpha: Float,
     cleanModeControlsExpanded: Boolean,
+    cleanModeUiAwake: Boolean,
     onAction: (TimerAction) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenLog: () -> Unit,
@@ -859,11 +874,16 @@ private fun LandscapeLayout(
             )
         }
 
+        // Right pane: scrollable controls with the label cemented at the bottom.
+        Box(
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+        ) {
         Column(
             modifier = Modifier
-                .weight(1f)
+                .fillMaxWidth()
                 .fillMaxHeight()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState(), enabled = !isCleanModeActive || cleanModeUiAwake)
+                .padding(bottom = 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (showTopClock) {
@@ -874,13 +894,22 @@ private fun LandscapeLayout(
                 )
             }
 
-            val showTitleLandscape = settings.timerTitleEnabled && timer.activeTimerName.isNotBlank()
-            if (showTopClock && showTitleLandscape) Spacer(modifier = Modifier.height(6.dp))
-            else if (showTopClock || showTitleLandscape) Spacer(modifier = Modifier.height(4.dp))
+            val showEndTimeLandscape = settings.showEndTimeEnabled &&
+                timer.status != TimerStatus.Finished && timer.displayMillis > 0L
+            if (showEndTimeLandscape) {
+                EndTimeText(
+                    timer = timer,
+                    clockPosition = settings.clockPosition,
+                    textSizeSp = settings.endTimeSizeSp,
+                    showSeconds = settings.showEndTimeSecondsEnabled,
+                    modifier = Modifier.alpha(
+                        if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f,
+                    ),
+                )
+            }
 
-            TimerTitleDisplay(timer = timer, isCleanModeActive = isCleanModeActive, minimalUiAlpha = minimalUiAlpha)
-
-            Spacer(modifier = Modifier.height(if (showTopClock || showTitleLandscape) 8.dp else 0.dp))
+            val showAnyTopRowLandscape = showTopClock || showEndTimeLandscape
+            if (showAnyTopRowLandscape) Spacer(modifier = Modifier.height(8.dp))
 
             StatusAndLogRow(
                 timer = timer,
@@ -957,6 +986,21 @@ private fun LandscapeLayout(
                 ),
             )
         }
+        // Label cemented at the bottom-right of the right pane, always visible.
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+        ) {
+            TimerTitleDisplay(
+                timer = timer,
+                isCleanModeActive = isCleanModeActive,
+                minimalUiAlpha = minimalUiAlpha,
+                forceAlpha = if (isCleanModeActive) 1f - minimalUiAlpha else 1f,
+            )
+        }
+        } // end right pane Box
     }
 }
 
@@ -1016,6 +1060,7 @@ private fun TimerNameChip(
     onNameChipClick: () -> Unit,
     onClearPreset: () -> Unit,
 ) {
+    val nameChipInteractable = !isCleanModeActive || minimalUiAlpha > 0.99f
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1024,7 +1069,7 @@ private fun TimerNameChip(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Surface(
-            onClick = onNameChipClick,
+            onClick = { if (nameChipInteractable) onNameChipClick() },
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
@@ -1067,7 +1112,7 @@ private fun TimerNameChip(
         }
         if (timer.activePresetId != null) {
             Surface(
-                onClick = onClearPreset,
+                onClick = { if (nameChipInteractable) onClearPreset() },
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
                 modifier = Modifier.size(36.dp),
@@ -1124,6 +1169,32 @@ private fun HeroTimerCard(
     modifier: Modifier = Modifier,
     isOledMode: Boolean = false,
 ) {
+    // Drive countdown text at wall-clock second boundaries so it ticks in sync with CurrentTimeText.
+    var syncedCountdownText by remember { mutableStateOf(timer.displayMillis.formatClockTime()) }
+    LaunchedEffect(timer.targetEndTimeMillis, timer.overtimeStartedAtMillis, timer.status) {
+        if (timer.status != TimerStatus.Running && timer.status != TimerStatus.Overtime) return@LaunchedEffect
+        while (true) {
+            val now = System.currentTimeMillis()
+            syncedCountdownText = when (timer.status) {
+                TimerStatus.Running -> {
+                    val tgt = timer.targetEndTimeMillis ?: (now + timer.remainingMillis)
+                    (tgt - now).coerceAtLeast(0L).formatClockTime()
+                }
+                TimerStatus.Overtime -> {
+                    val started = timer.overtimeStartedAtMillis ?: now
+                    (now - started).coerceAtLeast(0L).formatClockTime()
+                }
+                else -> break
+            }
+            delay(1_000L - (now % 1_000L))
+        }
+    }
+    val countdownText = if (timer.status == TimerStatus.Running || timer.status == TimerStatus.Overtime) {
+        syncedCountdownText
+    } else {
+        timer.displayMillis.formatClockTime()
+    }
+
     Box(contentAlignment = Alignment.Center, modifier = modifier) {
         VisualTimerCanvas(
             modifier = Modifier.fillMaxSize(),
@@ -1142,7 +1213,7 @@ private fun HeroTimerCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 Text(
-                    text = timer.displayMillis.formatClockTime(),
+                    text = countdownText,
                     style = MaterialTheme.typography.displaySmall.copy(
                         fontSize = timer.settings.centerTimeSizeSp.sp,
                         lineHeight = (timer.settings.centerTimeSizeSp * 1.2f).sp,
@@ -1334,6 +1405,12 @@ private fun SettingsSheetContent(
             )
             if (settings.showEndTimeEnabled) {
                 Spacer(modifier = Modifier.height(12.dp))
+                PreferenceToggle(
+                    label = stringResource(R.string.show_end_time_seconds),
+                    checked = settings.showEndTimeSecondsEnabled,
+                    onCheckedChange = { onAction(TimerAction.SetShowEndTimeSecondsEnabled(it)) },
+                )
+                Spacer(modifier = Modifier.height(12.dp))
                 SizeSlider(
                     label = stringResource(R.string.end_time_size),
                     value = settings.endTimeSizeSp,
@@ -1370,15 +1447,23 @@ private fun SettingsSheetContent(
             )
             if (settings.cleanModeEnabled) {
                 Spacer(modifier = Modifier.height(12.dp))
-                SizeSlider(
-                    label = stringResource(R.string.clean_mode_auto_dismiss_time),
-                    value = settings.cleanModeAutoDismissSeconds.toFloat(),
-                    onValueChange = { onAction(TimerAction.SetCleanModeAutoDismissSeconds(it.roundToInt())) },
-                    valueRange = CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS.toFloat()..CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS.toFloat(),
-                    defaultValue = CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS.toFloat(),
-                    steps = CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS - CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS - 1,
-                    valueText = "${settings.cleanModeAutoDismissSeconds}s",
+                PreferenceToggle(
+                    label = stringResource(R.string.clean_mode_auto_dismiss_enabled),
+                    checked = settings.cleanModeAutoDismissEnabled,
+                    onCheckedChange = { onAction(TimerAction.SetCleanModeAutoDismissEnabled(it)) },
                 )
+                if (settings.cleanModeAutoDismissEnabled) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    SizeSlider(
+                        label = stringResource(R.string.clean_mode_auto_dismiss_time),
+                        value = settings.cleanModeAutoDismissSeconds.toFloat(),
+                        onValueChange = { onAction(TimerAction.SetCleanModeAutoDismissSeconds(it.roundToInt())) },
+                        valueRange = CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS.toFloat()..CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS.toFloat(),
+                        defaultValue = CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS.toFloat(),
+                        steps = CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS - CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS - 1,
+                        valueText = "${settings.cleanModeAutoDismissSeconds}s",
+                    )
+                }
             }
             if (settings.cleanModeEnabled && settings.showCurrentTimeEnabled) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -1602,6 +1687,12 @@ private fun DefaultTimerSettingsSection(
         )
         if (defaultSettings.showEndTimeEnabled) {
             Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.show_end_time_seconds),
+                checked = defaultSettings.showEndTimeSecondsEnabled,
+                onCheckedChange = { onSettingsChanged(defaultSettings.copy(showEndTimeSecondsEnabled = it)) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
             SizeSlider(
                 label = stringResource(R.string.end_time_size),
                 value = defaultSettings.endTimeSizeSp,
@@ -1630,15 +1721,23 @@ private fun DefaultTimerSettingsSection(
         )
         if (defaultSettings.cleanModeEnabled) {
             Spacer(modifier = Modifier.height(12.dp))
-            SizeSlider(
-                label = stringResource(R.string.clean_mode_auto_dismiss_time),
-                value = defaultSettings.cleanModeAutoDismissSeconds.toFloat(),
-                onValueChange = { onSettingsChanged(defaultSettings.copy(cleanModeAutoDismissSeconds = it.roundToInt())) },
-                valueRange = CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS.toFloat()..CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS.toFloat(),
-                defaultValue = CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS.toFloat(),
-                steps = CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS - CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS - 1,
-                valueText = "${defaultSettings.cleanModeAutoDismissSeconds}s",
+            PreferenceToggle(
+                label = stringResource(R.string.clean_mode_auto_dismiss_enabled),
+                checked = defaultSettings.cleanModeAutoDismissEnabled,
+                onCheckedChange = { onSettingsChanged(defaultSettings.copy(cleanModeAutoDismissEnabled = it)) },
             )
+            if (defaultSettings.cleanModeAutoDismissEnabled) {
+                Spacer(modifier = Modifier.height(12.dp))
+                SizeSlider(
+                    label = stringResource(R.string.clean_mode_auto_dismiss_time),
+                    value = defaultSettings.cleanModeAutoDismissSeconds.toFloat(),
+                    onValueChange = { onSettingsChanged(defaultSettings.copy(cleanModeAutoDismissSeconds = it.roundToInt())) },
+                    valueRange = CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS.toFloat()..CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS.toFloat(),
+                    defaultValue = CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS.toFloat(),
+                    steps = CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS - CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS - 1,
+                    valueText = "${defaultSettings.cleanModeAutoDismissSeconds}s",
+                )
+            }
         }
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(
@@ -1968,7 +2067,14 @@ private fun CurrentTimeText(showSeconds: Boolean, clockPosition: ClockPosition, 
     LaunchedEffect(showSeconds) {
         while (true) {
             currentTimeText = LocalTime.now().format(formatter)
-            delay(if (showSeconds) 1_000L else 15_000L)
+            if (showSeconds) {
+                // Align to the next wall-clock second boundary so this clock ticks in
+                // phase with the visual timer (which crosses each second within 250ms).
+                val ms = System.currentTimeMillis()
+                delay(1_000L - (ms % 1_000L))
+            } else {
+                delay(15_000L)
+            }
         }
     }
 
@@ -1993,28 +2099,34 @@ private fun EndTimeText(
     timer: TimerInstance,
     clockPosition: ClockPosition,
     textSizeSp: Float,
+    showSeconds: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val formatter = rememberClockFormatter("h:mm a")
+    val formatter = rememberClockFormatter(if (showSeconds) "h:mm:ss a" else "h:mm a")
     val endMillis = when (timer.status) {
         TimerStatus.Running  -> timer.targetEndTimeMillis
         TimerStatus.Paused   -> System.currentTimeMillis() + (timer.pausedRemainingMillis ?: timer.remainingMillis)
         TimerStatus.Idle     -> System.currentTimeMillis() + timer.selectedDurationMillis
         else                 -> null
     } ?: return
-    var endText by remember(endMillis / 60_000) {
+    var endText by remember(endMillis / 60_000, showSeconds) {
         val time = java.time.Instant.ofEpochMilli(endMillis)
             .atZone(java.time.ZoneId.systemDefault())
             .toLocalTime()
-        mutableStateOf("E: ${time.format(formatter)}")
+        mutableStateOf("→ ${time.format(formatter)}")
     }
-    LaunchedEffect(endMillis) {
+    LaunchedEffect(endMillis, showSeconds) {
         while (true) {
             val time = java.time.Instant.ofEpochMilli(endMillis)
                 .atZone(java.time.ZoneId.systemDefault())
                 .toLocalTime()
-            endText = "E: ${time.format(formatter)}"
-            delay(30_000L)
+            endText = "→ ${time.format(formatter)}"
+            if (showSeconds) {
+                val ms = System.currentTimeMillis()
+                delay(1_000L - (ms % 1_000L))
+            } else {
+                delay(30_000L)
+            }
         }
     }
     Text(
@@ -2034,10 +2146,10 @@ private fun EndTimeText(
 }
 
 @Composable
-private fun TimerTitleDisplay(timer: TimerInstance, isCleanModeActive: Boolean, minimalUiAlpha: Float) {
+private fun TimerTitleDisplay(timer: TimerInstance, isCleanModeActive: Boolean, minimalUiAlpha: Float, forceAlpha: Float? = null) {
     val settings = timer.settings
     if (!settings.timerTitleEnabled || timer.activeTimerName.isBlank()) return
-    val alpha = if (isCleanModeActive && settings.timerTitleHideInCleanMode) minimalUiAlpha else 1f
+    val alpha = forceAlpha ?: (if (isCleanModeActive && settings.timerTitleHideInCleanMode) minimalUiAlpha else 1f)
     Text(
         text = timer.activeTimerName,
         style = MaterialTheme.typography.titleMedium.copy(

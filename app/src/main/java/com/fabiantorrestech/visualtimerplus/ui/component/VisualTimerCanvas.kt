@@ -5,6 +5,12 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -15,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import com.fabiantorrestech.visualtimerplus.timer.DRAG_MAX_MILLIS
 import com.fabiantorrestech.visualtimerplus.timer.ONE_HOUR_MILLIS
@@ -36,6 +43,19 @@ fun VisualTimerCanvas(
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val displayMs = timer.displayMillis
+
+    val isAlarming = timer.status == TimerStatus.Overtime
+    val infiniteTransition = rememberInfiniteTransition(label = "blink")
+    val blinkAlpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.25f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "blinkAlpha",
+    )
+    val canvasAlpha = if (isAlarming) blinkAlpha else 1f
 
     val baseArcFraction: Float
     val overlayArcFraction: Float
@@ -117,7 +137,7 @@ fun VisualTimerCanvas(
             )
         },
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = canvasAlpha }) {
             val diameter = min(size.width, size.height)
             val center = Offset(size.width / 2f, size.height / 2f)
             val radius = diameter / 2f

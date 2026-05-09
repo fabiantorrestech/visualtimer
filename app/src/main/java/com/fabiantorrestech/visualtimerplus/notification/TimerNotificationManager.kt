@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import com.fabiantorrestech.visualtimerplus.MainActivity
+import com.fabiantorrestech.visualtimerplus.ui.screen.TimerFinishedActivity
 import com.fabiantorrestech.visualtimerplus.R
 import com.fabiantorrestech.visualtimerplus.timer.AppState
 import com.fabiantorrestech.visualtimerplus.timer.NotificationMode
@@ -126,9 +127,16 @@ class TimerNotificationManager(
             activeTimer.activeTimerName.ifBlank { context.getString(R.string.notification_title) }
         }
 
+        val consolidatedBaseText = contentTextForTimer(activeTimer)
+        val consolidatedContentText = if (activeTimer.status == TimerStatus.Running && activeTimer.settings.showEndTimeEnabled) {
+            val endTime = activeTimer.targetEndTimeMillis
+                ?: (System.currentTimeMillis() + activeTimer.remainingMillis)
+            consolidatedBaseText + formatEndTimeSuffix(endTime, activeTimer.settings.showEndTimeSecondsEnabled)
+        } else consolidatedBaseText
+
         val builder = Notification.Builder(context, channelId)
             .setContentTitle(timerLabel)
-            .setContentText(contentTextForTimer(activeTimer))
+            .setContentText(consolidatedContentText)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setOngoing(activeTimer.status != TimerStatus.Idle)
             .setOnlyAlertOnce(true)
@@ -174,6 +182,7 @@ class TimerNotificationManager(
             TimerStatus.Finished -> {
                 builder
                     .setCategory(Notification.CATEGORY_ALARM)
+                    .setFullScreenIntent(fullScreenPendingIntent(), true)
                     .addAction(Notification.Action.Builder(
                         null, context.getString(R.string.dismiss),
                         servicePendingIntent(TimerService.ACTION_DISMISS_FINISHED, state.activeTimerIndex),
@@ -207,12 +216,17 @@ class TimerNotificationManager(
             TimerStatus.Running -> {
                 val endTime = timer.targetEndTimeMillis
                     ?: (System.currentTimeMillis() + timer.remainingMillis)
+                val approxText = approximateContentText(timer.remainingMillis)
+                val individualContentText = if (timer.settings.showEndTimeEnabled)
+                    approxText + formatEndTimeSuffix(endTime, timer.settings.showEndTimeSecondsEnabled)
+                else
+                    approxText
                 builder
                     .setWhen(endTime)
                     .setUsesChronometer(true)
                     .setChronometerCountDown(true)
                     .setShowWhen(true)
-                    .setContentText(approximateContentText(timer.remainingMillis))
+                    .setContentText(individualContentText)
                     .addAction(Notification.Action.Builder(
                         null, context.getString(R.string.pause),
                         servicePendingIntent(TimerService.ACTION_PAUSE, timer.id),
@@ -233,12 +247,14 @@ class TimerNotificationManager(
                 ).build())
             TimerStatus.Overtime -> builder
                 .setCategory(Notification.CATEGORY_ALARM)
+                .setFullScreenIntent(fullScreenPendingIntent(), true)
                 .addAction(Notification.Action.Builder(
                     null, context.getString(R.string.dismiss),
                     servicePendingIntent(TimerService.ACTION_DISMISS_FINISHED, timer.id),
                 ).build())
             TimerStatus.Finished -> builder
                 .setCategory(Notification.CATEGORY_ALARM)
+                .setFullScreenIntent(fullScreenPendingIntent(), true)
                 .addAction(Notification.Action.Builder(
                     null, context.getString(R.string.dismiss),
                     servicePendingIntent(TimerService.ACTION_DISMISS_FINISHED, timer.id),
@@ -314,6 +330,24 @@ class TimerNotificationManager(
                 else -> context.getString(R.string.notification_approx_seconds, roundedSeconds)
             }
         }
+    }
+
+    private fun formatEndTimeSuffix(endTimeMillis: Long, showSeconds: Boolean = false): String {
+        val time = java.time.Instant.ofEpochMilli(endTimeMillis)
+            .atZone(java.time.ZoneId.systemDefault())
+            .toLocalTime()
+        val pattern = if (showSeconds) "h:mm:ss a" else "h:mm a"
+        val formatter = java.time.format.DateTimeFormatter.ofPattern(pattern, java.util.Locale.getDefault())
+        return context.getString(R.string.notification_end_time_suffix, time.format(formatter))
+    }
+
+    private fun fullScreenPendingIntent(): PendingIntent {
+        val intent = Intent(context, TimerFinishedActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivity(
+            context, 9999, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 
     private fun primaryTimer(state: AppState): TimerInstance =

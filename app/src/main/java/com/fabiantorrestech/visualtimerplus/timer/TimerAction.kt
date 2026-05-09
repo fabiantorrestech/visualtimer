@@ -25,6 +25,7 @@ sealed interface TimerAction {
     data class SetClockTextSizeSp(val sp: Float, val timerIndex: Int = -1) : TimerAction
     data class SetClockwiseModeEnabled(val enabled: Boolean, val timerIndex: Int = -1) : TimerAction
     data class SetCleanModeEnabled(val enabled: Boolean, val timerIndex: Int = -1) : TimerAction
+    data class SetCleanModeAutoDismissEnabled(val enabled: Boolean, val timerIndex: Int = -1) : TimerAction
     data class SetCleanModeAutoDismissSeconds(val seconds: Int, val timerIndex: Int = -1) : TimerAction
     data class SetHideClockInCleanMode(val enabled: Boolean, val timerIndex: Int = -1) : TimerAction
     data class SetTimerTitleEnabled(val enabled: Boolean, val timerIndex: Int = -1) : TimerAction
@@ -33,6 +34,7 @@ sealed interface TimerAction {
     data class SetTimerTitleTextSizeSp(val sp: Float, val timerIndex: Int = -1) : TimerAction
     data class SetCenterTimeSizeSp(val sp: Float, val timerIndex: Int = -1) : TimerAction
     data class SetShowEndTimeEnabled(val enabled: Boolean, val timerIndex: Int = -1) : TimerAction
+    data class SetShowEndTimeSecondsEnabled(val enabled: Boolean, val timerIndex: Int = -1) : TimerAction
     data class SetEndTimeSizeSp(val sp: Float, val timerIndex: Int = -1) : TimerAction
 
     // Per-timer lifecycle actions — timerIndex = -1 means "use activeTimerIndex"
@@ -86,6 +88,7 @@ fun TimerAction.withTimerIndex(index: Int): TimerAction = when (this) {
     is TimerAction.SetClockTextSizeSp -> copy(timerIndex = index)
     is TimerAction.SetClockwiseModeEnabled -> copy(timerIndex = index)
     is TimerAction.SetCleanModeEnabled -> copy(timerIndex = index)
+    is TimerAction.SetCleanModeAutoDismissEnabled -> copy(timerIndex = index)
     is TimerAction.SetCleanModeAutoDismissSeconds -> copy(timerIndex = index)
     is TimerAction.SetHideClockInCleanMode -> copy(timerIndex = index)
     is TimerAction.SetTimerTitleEnabled -> copy(timerIndex = index)
@@ -94,6 +97,7 @@ fun TimerAction.withTimerIndex(index: Int): TimerAction = when (this) {
     is TimerAction.SetTimerTitleTextSizeSp -> copy(timerIndex = index)
     is TimerAction.SetCenterTimeSizeSp -> copy(timerIndex = index)
     is TimerAction.SetShowEndTimeEnabled -> copy(timerIndex = index)
+    is TimerAction.SetShowEndTimeSecondsEnabled -> copy(timerIndex = index)
     is TimerAction.SetEndTimeSizeSp -> copy(timerIndex = index)
     is TimerAction.Start -> copy(timerIndex = index)
     is TimerAction.Pause -> copy(timerIndex = index)

@@ -245,6 +245,11 @@ class TimerController(context: Context) {
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(cleanModeEnabled = action.enabled)) }
             }
 
+            is TimerAction.SetCleanModeAutoDismissEnabled -> {
+                val idx = resolveIndex(action.timerIndex)
+                TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(cleanModeAutoDismissEnabled = action.enabled)) }
+            }
+
             is TimerAction.SetCleanModeAutoDismissSeconds -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t ->
@@ -290,6 +295,13 @@ class TimerController(context: Context) {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t ->
                     t.copy(settings = t.settings.copy(showEndTimeEnabled = action.enabled))
+                }
+            }
+
+            is TimerAction.SetShowEndTimeSecondsEnabled -> {
+                val idx = resolveIndex(action.timerIndex)
+                TimerRepository.updateTimer(idx) { t ->
+                    t.copy(settings = t.settings.copy(showEndTimeSecondsEnabled = action.enabled))
                 }
             }
 

@@ -55,6 +55,7 @@ object TimerRepository {
     private const val K_CLOCKWISE_MODE = "clockwise_mode_enabled"
     private const val K_CLEAN_MODE = "clean_mode_enabled"
     private const val K_CLEAN_MODE_AUTO_DISMISS = "clean_mode_auto_dismiss_seconds"
+    private const val K_CLEAN_MODE_AUTO_DISMISS_ENABLED = "clean_mode_auto_dismiss_enabled"
     private const val K_HIDE_CLOCK_IN_CLEAN_MODE = "hide_clock_in_clean_mode"
     private const val K_TIMER_TITLE_ENABLED = "timer_title_enabled"
     private const val K_TIMER_TITLE_HIDE_IN_CLEAN_MODE = "timer_title_hide_in_clean_mode"
@@ -63,6 +64,7 @@ object TimerRepository {
     private const val K_CENTER_TIME_SIZE_SP = "center_time_size_sp"
     private const val K_PROMPT_BEFORE_START = "prompt_before_start"
     private const val K_SHOW_END_TIME = "show_end_time_enabled"
+    private const val K_SHOW_END_TIME_SECONDS = "show_end_time_seconds_enabled"
     private const val K_END_TIME_SIZE_SP = "end_time_size_sp"
 
     // ── Legacy single-timer keys (for migration) ───────────────────────────────
@@ -258,6 +260,7 @@ object TimerRepository {
             clockTextSizeSp = preferences.getFloat("$prefix$K_CLOCK_TEXT_SIZE_SP", 32f).coerceIn(14f, 60f),
             clockwiseModeEnabled = preferences.getBoolean("$prefix$K_CLOCKWISE_MODE", true),
             cleanModeEnabled = preferences.getBoolean("$prefix$K_CLEAN_MODE", false),
+            cleanModeAutoDismissEnabled = preferences.getBoolean("$prefix$K_CLEAN_MODE_AUTO_DISMISS_ENABLED", true),
             cleanModeAutoDismissSeconds = clampCleanModeAutoDismissSeconds(
                 preferences.getInt("$prefix$K_CLEAN_MODE_AUTO_DISMISS", CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS)
             ),
@@ -269,6 +272,7 @@ object TimerRepository {
             centerTimeSizeSp = preferences.getFloat("$prefix$K_CENTER_TIME_SIZE_SP", 36f).coerceIn(20f, 80f),
             promptBeforeStart = preferences.getBoolean("$prefix$K_PROMPT_BEFORE_START", false),
             showEndTimeEnabled = preferences.getBoolean("$prefix$K_SHOW_END_TIME", false),
+            showEndTimeSecondsEnabled = preferences.getBoolean("$prefix$K_SHOW_END_TIME_SECONDS", false),
             endTimeSizeSp = preferences.getFloat("$prefix$K_END_TIME_SIZE_SP", 32f).coerceIn(14f, 60f),
         )
     }
@@ -345,6 +349,7 @@ object TimerRepository {
             .putFloat("$prefix$K_CLOCK_TEXT_SIZE_SP", settings.clockTextSizeSp)
             .putBoolean("$prefix$K_CLOCKWISE_MODE", settings.clockwiseModeEnabled)
             .putBoolean("$prefix$K_CLEAN_MODE", settings.cleanModeEnabled)
+            .putBoolean("$prefix$K_CLEAN_MODE_AUTO_DISMISS_ENABLED", settings.cleanModeAutoDismissEnabled)
             .putInt("$prefix$K_CLEAN_MODE_AUTO_DISMISS", clampCleanModeAutoDismissSeconds(settings.cleanModeAutoDismissSeconds))
             .putBoolean("$prefix$K_HIDE_CLOCK_IN_CLEAN_MODE", settings.hideClockInCleanMode)
             .putBoolean("$prefix$K_TIMER_TITLE_ENABLED", settings.timerTitleEnabled)
@@ -354,6 +359,7 @@ object TimerRepository {
             .putFloat("$prefix$K_CENTER_TIME_SIZE_SP", settings.centerTimeSizeSp)
             .putBoolean("$prefix$K_PROMPT_BEFORE_START", settings.promptBeforeStart)
             .putBoolean("$prefix$K_SHOW_END_TIME", settings.showEndTimeEnabled)
+            .putBoolean("$prefix$K_SHOW_END_TIME_SECONDS", settings.showEndTimeSecondsEnabled)
             .putFloat("$prefix$K_END_TIME_SIZE_SP", settings.endTimeSizeSp)
     }
 

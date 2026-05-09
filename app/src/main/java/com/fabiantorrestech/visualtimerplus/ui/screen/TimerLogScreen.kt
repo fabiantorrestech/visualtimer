@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -146,8 +149,8 @@ fun TimerLogScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(entries, key = { it.id }) { entry ->
-                        LogEntryCard(entry = entry)
+                    itemsIndexed(entries, key = { _, entry -> entry.id }) { index, entry ->
+                        LogEntryCard(index = index + 1, entry = entry)
                     }
                 }
             }
@@ -156,7 +159,7 @@ fun TimerLogScreen(
 }
 
 @Composable
-private fun LogEntryCard(entry: TimerLogEntity) {
+private fun LogEntryCard(index: Int, entry: TimerLogEntity) {
     val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy  h:mm a", Locale.getDefault()) }
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
 
@@ -179,6 +182,14 @@ private fun LogEntryCard(entry: TimerLogEntity) {
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f),
                 ) {
+                    Text(
+                        text = "$index",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.widthIn(min = 24.dp),
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = entry.timerName,
                         style = MaterialTheme.typography.titleSmall,

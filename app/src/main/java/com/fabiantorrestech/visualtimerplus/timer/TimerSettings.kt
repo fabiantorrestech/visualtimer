@@ -14,6 +14,7 @@ data class TimerSettings(
     val clockTextSizeSp: Float = 32f,
     val clockwiseModeEnabled: Boolean = true,
     val cleanModeEnabled: Boolean = false,
+    val cleanModeAutoDismissEnabled: Boolean = true,
     val cleanModeAutoDismissSeconds: Int = CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS,
     val hideClockInCleanMode: Boolean = false,
     val timerTitleEnabled: Boolean = false,
@@ -24,5 +25,6 @@ data class TimerSettings(
     val promptBeforeStart: Boolean = false,
     val keepScreenAwake: Boolean = false,
     val showEndTimeEnabled: Boolean = false,
+    val showEndTimeSecondsEnabled: Boolean = false,
     val endTimeSizeSp: Float = 32f,
 )
