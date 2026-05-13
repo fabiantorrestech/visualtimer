@@ -292,6 +292,10 @@ object TimerRepository {
         )
     }
 
+    fun reloadFromPrefs() {
+        mutableState.value = loadState()
+    }
+
     // ── Persist ───────────────────────────────────────────────────────────────
 
     private fun persistState(state: AppState) {

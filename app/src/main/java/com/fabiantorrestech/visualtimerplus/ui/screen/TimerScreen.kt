@@ -1,6 +1,8 @@
 package com.fabiantorrestech.visualtimerplus.ui.screen
 
 import android.content.res.Configuration
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
@@ -54,6 +56,7 @@ import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -78,6 +81,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -85,6 +89,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fabiantorrestech.visualtimerplus.R
+import com.fabiantorrestech.visualtimerplus.backup.BackupManager
 import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.timer.AppState
 import com.fabiantorrestech.visualtimerplus.timer.CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS
@@ -109,10 +114,13 @@ import com.fabiantorrestech.visualtimerplus.ui.component.QuickAdjustRow
 import com.fabiantorrestech.visualtimerplus.ui.component.TimerControls
 import com.fabiantorrestech.visualtimerplus.ui.component.VisualTimerCanvas
 import com.fabiantorrestech.visualtimerplus.util.formatClockTime
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -1331,6 +1339,80 @@ private fun SettingsSheetContent(
     onOpenOverlayPermissionSettings: () -> Unit,
 ) {
     val settings = timer.settings
+    val context = LocalContext.current
+    val dao = remember { AppDatabase.getInstance(context).appDao() }
+    val backupScope = rememberCoroutineScope()
+    var pendingImportJson by remember { mutableStateOf<String?>(null) }
+    var backupStatusMessage by remember { mutableStateOf<String?>(null) }
+    val today = remember { LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        backupScope.launch {
+            try {
+                val (folders, presets) = withContext(Dispatchers.IO) {
+                    dao.getAllFolders() to dao.getAllPresets()
+                }
+                val json = BackupManager.buildBackup(context, folders, presets).toString(2)
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                }
+                backupStatusMessage = context.getString(R.string.backup_export_success)
+            } catch (e: Exception) {
+                backupStatusMessage = "Export failed: ${e.message}"
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        backupScope.launch {
+            try {
+                val json = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
+                        ?: throw IllegalStateException("Could not read file.")
+                }
+                BackupManager.parseBackup(json)
+                pendingImportJson = json
+            } catch (e: Exception) {
+                backupStatusMessage = "Import failed: ${e.message}"
+            }
+        }
+    }
+
+    pendingImportJson?.let { json ->
+        AlertDialog(
+            onDismissRequest = { pendingImportJson = null },
+            title = { Text(stringResource(R.string.backup_import_confirm_title)) },
+            text = { Text(stringResource(R.string.backup_import_confirm_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingImportJson = null
+                    backupScope.launch {
+                        try {
+                            val root = BackupManager.parseBackup(json)
+                            withContext(Dispatchers.IO) {
+                                BackupManager.applyBackup(context, root, dao)
+                            }
+                            backupStatusMessage = context.getString(R.string.backup_import_success)
+                        } catch (e: Exception) {
+                            backupStatusMessage = "Import failed: ${e.message}"
+                        }
+                    }
+                }) { Text(stringResource(R.string.backup_import)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingImportJson = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1702,6 +1784,33 @@ private fun SettingsSheetContent(
                 intervalSeconds = appState.notificationUpdateIntervalSeconds,
                 onIntervalSelected = { onAction(TimerAction.SetNotificationUpdateInterval(it)) },
             )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ── Backup & Restore ──────────────────────────────────────────────────
+        SectionCard(title = stringResource(R.string.backup_restore_title)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    onClick = { exportLauncher.launch("visualtimer_backup_$today.json") },
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(R.string.backup_export)) }
+                OutlinedButton(
+                    onClick = { importLauncher.launch(arrayOf("application/json")) },
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(R.string.backup_import)) }
+            }
+            backupStatusMessage?.let { msg ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = msg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))

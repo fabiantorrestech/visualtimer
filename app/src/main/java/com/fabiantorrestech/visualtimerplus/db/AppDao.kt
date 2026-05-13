@@ -15,6 +15,12 @@ interface AppDao {
     @Query("SELECT * FROM preset_folders ORDER BY sortOrder ASC, name ASC")
     fun observeFolders(): Flow<List<PresetFolderEntity>>
 
+    @Query("SELECT * FROM preset_folders ORDER BY sortOrder ASC, name ASC")
+    suspend fun getAllFolders(): List<PresetFolderEntity>
+
+    @Query("DELETE FROM preset_folders")
+    suspend fun deleteAllFolders()
+
     @Insert
     suspend fun insertFolder(folder: PresetFolderEntity): Long
 
@@ -47,6 +53,12 @@ interface AppDao {
 
     @Query("SELECT COUNT(*) FROM presets")
     suspend fun getPresetCount(): Int
+
+    @Query("SELECT * FROM presets ORDER BY folderId ASC NULLS LAST, sortOrder ASC, name ASC")
+    suspend fun getAllPresets(): List<PresetEntity>
+
+    @Query("DELETE FROM presets")
+    suspend fun deleteAllPresets()
 
     // ── Timer log ─────────────────────────────────────────────────────────────
 
