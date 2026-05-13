@@ -8,6 +8,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -683,7 +687,15 @@ private fun PortraitLayout(
             timer = timer,
             displayAlpha = if (isCleanModeActive) minimalUiAlpha else 1f,
             onDurationSelected = { onAction(TimerAction.SetDuration(it)) },
-            onCenterTap = onOpenDurationPicker,
+            onCenterTap = {
+                when (timer.status) {
+                    TimerStatus.Idle    -> onStartWithPromptCheck()
+                    TimerStatus.Running -> onAction(TimerAction.Pause())
+                    TimerStatus.Paused  -> onAction(TimerAction.Resume())
+                    else                -> {}
+                }
+            },
+            onCenterLongPress = onOpenDurationPicker,
             modifier = Modifier.fillMaxWidth().aspectRatio(1f),
             isOledMode = appState.isOledMode,
             onDragActiveChanged = { isDragging = it },
@@ -744,9 +756,13 @@ private fun PortraitLayout(
                 }
             }
 
-            val showEndTime = settings.showEndTimeEnabled &&
-                timer.status != TimerStatus.Finished && timer.displayMillis > 0L
-            if (showEndTime) {
+            val showEndTime = timer.status != TimerStatus.Finished && timer.displayMillis > 0L &&
+                (settings.showEndTimeEnabled || timer.status == TimerStatus.Idle)
+            AnimatedVisibility(
+                visible = showEndTime,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
                 EndTimeText(
                     timer = timer,
                     clockPosition = settings.clockPosition,
@@ -911,7 +927,15 @@ private fun LandscapeLayout(
                 timer = timer,
                 displayAlpha = if (isCleanModeActive) minimalUiAlpha else 1f,
                 onDurationSelected = { onAction(TimerAction.SetDuration(it)) },
-                onCenterTap = onOpenDurationPicker,
+                onCenterTap = {
+                    when (timer.status) {
+                        TimerStatus.Idle    -> onStartWithPromptCheck()
+                        TimerStatus.Running -> onAction(TimerAction.Pause())
+                        TimerStatus.Paused  -> onAction(TimerAction.Resume())
+                        else                -> {}
+                    }
+                },
+                onCenterLongPress = onOpenDurationPicker,
                 modifier = Modifier.fillMaxSize(),
                 isOledMode = appState.isOledMode,
                 onDragActiveChanged = { isDragging = it },
@@ -974,9 +998,13 @@ private fun LandscapeLayout(
                 }
             }
 
-            val showEndTimeLandscape = settings.showEndTimeEnabled &&
-                timer.status != TimerStatus.Finished && timer.displayMillis > 0L
-            if (showEndTimeLandscape) {
+            val showEndTimeLandscape = timer.status != TimerStatus.Finished && timer.displayMillis > 0L &&
+                (settings.showEndTimeEnabled || timer.status == TimerStatus.Idle)
+            AnimatedVisibility(
+                visible = showEndTimeLandscape,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
                 EndTimeText(
                     timer = timer,
                     clockPosition = settings.clockPosition,
@@ -1252,6 +1280,7 @@ private fun HeroTimerCard(
     displayAlpha: Float,
     onDurationSelected: (Long) -> Unit,
     onCenterTap: () -> Unit,
+    onCenterLongPress: () -> Unit,
     modifier: Modifier = Modifier,
     isOledMode: Boolean = false,
     onDragActiveChanged: (Boolean) -> Unit = {},
@@ -1290,10 +1319,13 @@ private fun HeroTimerCard(
             isOledMode = isOledMode,
             onDragActiveChanged = onDragActiveChanged,
         )
-        Surface(
-            onClick = onCenterTap,
-            color = androidx.compose.ui.graphics.Color.Transparent,
-            modifier = Modifier.wrapContentSize(),
+        Box(
+            modifier = Modifier
+                .wrapContentSize()
+                .combinedClickable(
+                    onClick = onCenterTap,
+                    onLongClick = onCenterLongPress,
+                ),
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
