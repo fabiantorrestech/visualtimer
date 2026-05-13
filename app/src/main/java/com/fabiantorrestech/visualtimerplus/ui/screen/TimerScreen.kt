@@ -1,6 +1,8 @@
 package com.fabiantorrestech.visualtimerplus.ui.screen
 
+import android.content.Intent
 import android.content.res.Configuration
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -46,6 +48,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.foundation.layout.aspectRatio
@@ -85,10 +88,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fabiantorrestech.visualtimerplus.R
+import com.fabiantorrestech.visualtimerplus.backup.AutoBackupManager
 import com.fabiantorrestech.visualtimerplus.backup.BackupManager
 import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.timer.AppState
@@ -366,7 +371,7 @@ fun TimerScreen(
                         do {
                             val event = awaitPointerEvent(PointerEventPass.Final)
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (change.isConsumed) { consumed = true; break }
+                            if (change.isConsumed && !(cleanModeState.value && !cleanModeUiAwakeState.value)) { consumed = true; break }
                             if (!change.pressed) break
                             if ((change.position - startPos).getDistance() > viewConfiguration.touchSlop) {
                                 slopExceeded = true; break
@@ -1346,6 +1351,22 @@ private fun SettingsSheetContent(
     var backupStatusMessage by remember { mutableStateOf<String?>(null) }
     val today = remember { LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) }
 
+    var autoBackupLocationUri by remember {
+        mutableStateOf(AutoBackupManager.getSavedLocationUri(context))
+    }
+
+    val autoBackupFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        context.contentResolver.takePersistableUriPermission(
+            uri,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+        )
+        AutoBackupManager.saveLocationUri(context, uri)
+        autoBackupLocationUri = uri.toString()
+    }
+
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -1803,6 +1824,60 @@ private fun SettingsSheetContent(
                     modifier = Modifier.weight(1f),
                 ) { Text(stringResource(R.string.backup_import)) }
             }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.auto_backup_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.auto_backup_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Switch(
+                    checked = appState.autoBackupEnabled,
+                    onCheckedChange = { onAction(TimerAction.SetAutoBackupEnabled(it)) },
+                    enabled = autoBackupLocationUri != null,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = { autoBackupFolderLauncher.launch(null) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    if (autoBackupLocationUri == null)
+                        stringResource(R.string.auto_backup_set_location)
+                    else
+                        stringResource(R.string.auto_backup_change_location)
+                )
+            }
+
+            autoBackupLocationUri?.let { uriString ->
+                Spacer(modifier = Modifier.height(4.dp))
+                val displayPath = Uri.parse(uriString).lastPathSegment ?: uriString
+                Text(
+                    text = stringResource(R.string.auto_backup_location_prefix) + displayPath,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
             backupStatusMessage?.let { msg ->
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(

@@ -206,4 +206,9 @@
     <string name="backup_import_confirm_body">This will overwrite your current settings and presets. This cannot be undone.</string>
     <string name="backup_export_success">Backup exported successfully.</string>
     <string name="backup_import_success">Backup imported successfully.</string>
+    <string name="auto_backup_title">Auto-Backup</string>
+    <string name="auto_backup_description">Automatically saves a backup file (visualtimer_autobackup.json) to your chosen folder after 2 minutes of inactivity following any settings or preset change. The app must be open. Requires a backup location to be set first.</string>
+    <string name="auto_backup_set_location">Set Backup Location</string>
+    <string name="auto_backup_change_location">Change Backup Location</string>
+    <string name="auto_backup_location_prefix">Location: </string>
 </resources>

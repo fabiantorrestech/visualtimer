@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.db.TimerLogEntity
+import com.fabiantorrestech.visualtimerplus.backup.AutoBackupManager
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
 import com.fabiantorrestech.visualtimerplus.overlay.TimerOverlayManager
 import kotlinx.coroutines.CoroutineScope
@@ -125,75 +126,96 @@ class TimerController(context: Context) {
             // ── App-global settings ────────────────────────────────────────────
             is TimerAction.SetThemeMode -> {
                 TimerRepository.update { state -> state.copy(themeMode = action.mode) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetOledMode -> {
                 TimerRepository.update { state -> state.copy(isOledMode = action.enabled) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetHideStatusBarEnabled -> {
                 TimerRepository.update { state -> state.copy(hideStatusBarEnabled = action.enabled) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetHideStatusBarOnlyWhenRunning -> {
                 TimerRepository.update { state -> state.copy(hideStatusBarOnlyWhenRunning = action.enabled) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetNotificationMode -> {
                 TimerRepository.update { state -> state.copy(notificationMode = action.mode) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetHidePageDotsInCleanMode -> {
                 TimerRepository.update { state -> state.copy(hidePageDotsInCleanMode = action.enabled) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetDefaultTimerSettings -> {
                 TimerRepository.update { state -> state.copy(defaultTimerSettings = action.settings) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetConfirmSwipeDelete -> {
                 TimerRepository.update { state -> state.copy(confirmSwipeDelete = action.enabled) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetAppDefaultDuration -> {
                 TimerRepository.update { state -> state.copy(defaultDurationMillis = action.durationMillis) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetTapToToggleMinimalMode -> {
                 TimerRepository.update { state -> state.copy(tapToToggleMinimalMode = action.enabled) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetNotificationUpdateInterval -> {
                 val clamped = NOTIFICATION_UPDATE_INTERVAL_STEPS
                     .minByOrNull { kotlin.math.abs(it - action.seconds) } ?: 15
                 TimerRepository.update { state -> state.copy(notificationUpdateIntervalSeconds = clamped) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetOverlayEnabled -> {
                 TimerRepository.update { state -> state.copy(overlayEnabled = action.enabled) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetOverlaySize -> {
                 TimerRepository.update { state -> state.copy(overlaySize = action.size) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetOverlayStyle -> {
                 TimerRepository.update { state -> state.copy(overlayStyle = action.style) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetOverlayShowOnLockscreen -> {
                 TimerRepository.update { state -> state.copy(overlayShowOnLockscreen = action.enabled) }
+                AutoBackupManager.scheduleBackup(appContext)
+            }
+
+            is TimerAction.SetAutoBackupEnabled -> {
+                TimerRepository.update { state -> state.copy(autoBackupEnabled = action.enabled) }
             }
 
             // ── Per-timer settings ─────────────────────────────────────────────
             is TimerAction.SetSoundEnabled -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(soundEnabled = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetFinishedSoundRoute -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(finishedSoundRoute = action.route)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetFinishedSoundVolumePercent -> {
@@ -201,31 +223,37 @@ class TimerController(context: Context) {
                 TimerRepository.updateTimer(idx) { t ->
                     t.copy(settings = t.settings.copy(finishedSoundVolumePercent = action.percent.coerceIn(0, 100)))
                 }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetOverrideMutedSystemVolume -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(overrideMutedSystemVolume = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetIgnoreSilentMode -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(ignoreSilentMode = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetFullClockMode -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(fullClockMode = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetFinishedVibrationMode -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(finishedVibrationMode = action.mode)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetKeepScreenAwakeEnabled -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(keepScreenAwake = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetShowCurrentTimeEnabled -> {
@@ -236,36 +264,43 @@ class TimerController(context: Context) {
                         showClockSecondsEnabled = if (action.enabled) t.settings.showClockSecondsEnabled else false,
                     ))
                 }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetShowClockSecondsEnabled -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(showClockSecondsEnabled = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetClockPosition -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(clockPosition = action.position)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetClockTextSizeSp -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(clockTextSizeSp = action.sp.coerceIn(14f, 60f))) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetClockwiseModeEnabled -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(clockwiseModeEnabled = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetCleanModeEnabled -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(cleanModeEnabled = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetCleanModeAutoDismissEnabled -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(cleanModeAutoDismissEnabled = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetCleanModeAutoDismissSeconds -> {
@@ -273,26 +308,31 @@ class TimerController(context: Context) {
                 TimerRepository.updateTimer(idx) { t ->
                     t.copy(settings = t.settings.copy(cleanModeAutoDismissSeconds = clampCleanModeAutoDismissSeconds(action.seconds)))
                 }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetHideClockInCleanMode -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(hideClockInCleanMode = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetTimerTitleEnabled -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(timerTitleEnabled = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetTimerTitleHideInCleanMode -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(timerTitleHideInCleanMode = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetTimerTitlePosition -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(timerTitlePosition = action.position)) }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetTimerTitleTextSizeSp -> {
@@ -300,6 +340,7 @@ class TimerController(context: Context) {
                 TimerRepository.updateTimer(idx) { t ->
                     t.copy(settings = t.settings.copy(timerTitleTextSizeSp = action.sp.coerceIn(10f, 48f)))
                 }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetCenterTimeSizeSp -> {
@@ -307,6 +348,7 @@ class TimerController(context: Context) {
                 TimerRepository.updateTimer(idx) { t ->
                     t.copy(settings = t.settings.copy(centerTimeSizeSp = action.sp.coerceIn(20f, 80f)))
                 }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetShowEndTimeEnabled -> {
@@ -314,6 +356,7 @@ class TimerController(context: Context) {
                 TimerRepository.updateTimer(idx) { t ->
                     t.copy(settings = t.settings.copy(showEndTimeEnabled = action.enabled))
                 }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetShowEndTimeSecondsEnabled -> {
@@ -321,6 +364,7 @@ class TimerController(context: Context) {
                 TimerRepository.updateTimer(idx) { t ->
                     t.copy(settings = t.settings.copy(showEndTimeSecondsEnabled = action.enabled))
                 }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             is TimerAction.SetEndTimeSizeSp -> {
@@ -328,6 +372,7 @@ class TimerController(context: Context) {
                 TimerRepository.updateTimer(idx) { t ->
                     t.copy(settings = t.settings.copy(endTimeSizeSp = action.sp.coerceIn(14f, 60f)))
                 }
+                AutoBackupManager.scheduleBackup(appContext)
             }
 
             // ── Per-timer data ─────────────────────────────────────────────────

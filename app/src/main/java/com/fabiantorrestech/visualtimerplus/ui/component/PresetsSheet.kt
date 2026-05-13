@@ -49,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.fabiantorrestech.visualtimerplus.R
+import com.fabiantorrestech.visualtimerplus.backup.AutoBackupManager
 import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.db.PresetEntity
 import com.fabiantorrestech.visualtimerplus.db.PresetFolderEntity
@@ -78,6 +80,7 @@ fun PresetsSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val dao = db.appDao()
+    val context = LocalContext.current
 
     val folders by dao.observeFolders().collectAsState(emptyList())
     val allPresets by dao.observePresets().collectAsState(emptyList())
@@ -144,7 +147,10 @@ fun PresetsSheet(
         DurationPickerSheet(
             initialMillis = preset.durationMillis,
             onDurationSet = { millis ->
-                scope.launch { dao.updatePreset(preset.copy(durationMillis = millis)) }
+                scope.launch {
+                    dao.updatePreset(preset.copy(durationMillis = millis))
+                    AutoBackupManager.scheduleBackup(context)
+                }
                 presetToChangeDuration = null
             },
             onDismiss = { presetToChangeDuration = null },
@@ -155,7 +161,10 @@ fun PresetsSheet(
         PresetSettingsSheet(
             preset = preset,
             onSave = { updated ->
-                scope.launch { dao.updatePreset(updated) }
+                scope.launch {
+                    dao.updatePreset(updated)
+                    AutoBackupManager.scheduleBackup(context)
+                }
                 presetToEditSettings = null
             },
             onDismiss = { presetToEditSettings = null },
@@ -167,7 +176,10 @@ fun PresetsSheet(
             preset = preset,
             folders = folders,
             onConfirm = { targetFolderId ->
-                scope.launch { dao.updatePreset(preset.copy(folderId = targetFolderId)) }
+                scope.launch {
+                    dao.updatePreset(preset.copy(folderId = targetFolderId))
+                    AutoBackupManager.scheduleBackup(context)
+                }
                 presetToMoveToFolder = null
             },
             onDismiss = { presetToMoveToFolder = null },
@@ -196,6 +208,7 @@ fun PresetsSheet(
                             folderId = folderId,
                         ),
                     )
+                    AutoBackupManager.scheduleBackup(context)
                 }
                 showAddPresetDialog = false
                 pendingPresetName = ""
@@ -216,7 +229,10 @@ fun PresetsSheet(
             title = stringResource(R.string.preset_rename),
             initialValue = preset.name,
             onConfirm = { newName ->
-                scope.launch { dao.updatePreset(preset.copy(name = newName.trim())) }
+                scope.launch {
+                    dao.updatePreset(preset.copy(name = newName.trim()))
+                    AutoBackupManager.scheduleBackup(context)
+                }
                 presetToRename = null
             },
             onDismiss = { presetToRename = null },
@@ -228,7 +244,10 @@ fun PresetsSheet(
             title = stringResource(R.string.folder_rename),
             initialValue = folder.name,
             onConfirm = { newName ->
-                scope.launch { dao.updateFolder(folder.copy(name = newName.trim())) }
+                scope.launch {
+                    dao.updateFolder(folder.copy(name = newName.trim()))
+                    AutoBackupManager.scheduleBackup(context)
+                }
                 folderToRename = null
             },
             onDismiss = { folderToRename = null },
@@ -240,7 +259,10 @@ fun PresetsSheet(
             title = stringResource(R.string.folder_add),
             initialValue = "",
             onConfirm = { name ->
-                scope.launch { dao.insertFolder(PresetFolderEntity(name = name.trim())) }
+                scope.launch {
+                    dao.insertFolder(PresetFolderEntity(name = name.trim()))
+                    AutoBackupManager.scheduleBackup(context)
+                }
                 showAddFolderDialog = false
             },
             onDismiss = { showAddFolderDialog = false },
@@ -328,6 +350,7 @@ fun PresetsSheet(
                                         scope.launch {
                                             dao.orphanPresetsInFolder(folder.id)
                                             dao.deleteFolder(folder)
+                                            AutoBackupManager.scheduleBackup(context)
                                         }
                                     },
                                     onAddPreset = if (editMode) {
@@ -357,7 +380,12 @@ fun PresetsSheet(
                                     onChangeDuration = { presetToChangeDuration = preset },
                                     onEditSettings = { presetToEditSettings = preset },
                                     onMoveToFolder = { presetToMoveToFolder = preset },
-                                    onDelete = { scope.launch { dao.deletePreset(preset) } },
+                                    onDelete = {
+                                        scope.launch {
+                                            dao.deletePreset(preset)
+                                            AutoBackupManager.scheduleBackup(context)
+                                        }
+                                    },
                                     onDragStart = {
                                         draggedPresetId = preset.id
                                         dragFolderId = folder.id
@@ -388,6 +416,7 @@ fun PresetsSheet(
                                                 list.forEachIndexed { index, p ->
                                                     dao.updatePreset(p.copy(sortOrder = index))
                                                 }
+                                                AutoBackupManager.scheduleBackup(context)
                                             }
                                         }
                                         draggedPresetId = null
@@ -434,7 +463,12 @@ fun PresetsSheet(
                                 onChangeDuration = { presetToChangeDuration = preset },
                                 onEditSettings = { presetToEditSettings = preset },
                                 onMoveToFolder = { presetToMoveToFolder = preset },
-                                onDelete = { scope.launch { dao.deletePreset(preset) } },
+                                onDelete = {
+                                    scope.launch {
+                                        dao.deletePreset(preset)
+                                        AutoBackupManager.scheduleBackup(context)
+                                    }
+                                },
                                 onDragStart = {
                                     draggedPresetId = preset.id
                                     dragFolderId = null
@@ -464,6 +498,7 @@ fun PresetsSheet(
                                             list.forEachIndexed { index, p ->
                                                 dao.updatePreset(p.copy(sortOrder = index))
                                             }
+                                            AutoBackupManager.scheduleBackup(context)
                                         }
                                     }
                                     draggedPresetId = null
