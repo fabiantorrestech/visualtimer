@@ -29,6 +29,7 @@ import com.fabiantorrestech.visualtimerplus.timer.TimerStatus
 fun TimerControls(
     timer: TimerInstance,
     onAction: (TimerAction) -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -39,44 +40,44 @@ fun TimerControls(
             TimerStatus.Idle -> {
                 SecondaryControlButton(
                     onClick = { onAction(TimerAction.Reset()) },
-                    enabled = timer.selectedDurationMillis > 0L,
+                    enabled = enabled && timer.selectedDurationMillis > 0L,
                 ) {
                     ControlButtonContent(iconText = "R", label = stringResource(R.string.reset))
                 }
                 PrimaryControlButton(
                     onClick = { onAction(TimerAction.Start()) },
-                    enabled = timer.selectedDurationMillis > 0L,
+                    enabled = enabled && timer.selectedDurationMillis > 0L,
                 ) {
                     Text(text = stringResource(R.string.start))
                 }
             }
 
             TimerStatus.Running -> {
-                SecondaryControlButton(onClick = { onAction(TimerAction.Reset()) }) {
+                SecondaryControlButton(onClick = { onAction(TimerAction.Reset()) }, enabled = enabled) {
                     ControlButtonContent(iconText = "R", label = stringResource(R.string.reset))
                 }
-                PrimaryControlButton(onClick = { onAction(TimerAction.Pause()) }) {
+                PrimaryControlButton(onClick = { onAction(TimerAction.Pause()) }, enabled = enabled) {
                     ControlButtonContent(iconText = "II", label = stringResource(R.string.pause))
                 }
             }
 
             TimerStatus.Paused -> {
-                SecondaryControlButton(onClick = { onAction(TimerAction.Reset()) }) {
+                SecondaryControlButton(onClick = { onAction(TimerAction.Reset()) }, enabled = enabled) {
                     ControlButtonContent(iconText = "R", label = stringResource(R.string.reset))
                 }
-                PrimaryControlButton(onClick = { onAction(TimerAction.Resume()) }) {
+                PrimaryControlButton(onClick = { onAction(TimerAction.Resume()) }, enabled = enabled) {
                     ControlButtonContent(iconText = ">", label = stringResource(R.string.resume))
                 }
             }
 
             TimerStatus.Overtime,
             TimerStatus.Finished -> {
-                SecondaryControlButton(onClick = { onAction(TimerAction.DismissFinished()) }) {
+                SecondaryControlButton(onClick = { onAction(TimerAction.DismissFinished()) }, enabled = enabled) {
                     ControlButtonContent(iconText = "X", label = stringResource(R.string.dismiss))
                 }
                 PrimaryControlButton(
                     onClick = { onAction(TimerAction.Restart()) },
-                    enabled = timer.originalDurationMillis > 0L,
+                    enabled = enabled && timer.originalDurationMillis > 0L,
                 ) {
                     ControlButtonContent(iconText = "↺", label = stringResource(R.string.restart))
                 }

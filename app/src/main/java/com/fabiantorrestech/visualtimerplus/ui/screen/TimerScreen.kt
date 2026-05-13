@@ -8,6 +8,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -445,6 +446,7 @@ fun TimerScreen(
                         onAdjust = { pagedOnAction(TimerAction.AdjustDuration(it)) },
                         awakenMinimalUi = ::awakenMinimalUi,
                         cleanModeUiAwake = cleanModeUiAwake,
+                        tapToToggleMinimalMode = appState.tapToToggleMinimalMode,
                         onCleanModeAdjust = { delta ->
                             pagedOnAction(TimerAction.AdjustDuration(delta))
                             awakenMinimalUi()
@@ -645,10 +647,12 @@ private fun PortraitLayout(
     onAdjust: (Long) -> Unit,
     awakenMinimalUi: () -> Unit,
     cleanModeUiAwake: Boolean,
+    tapToToggleMinimalMode: Boolean,
     onCleanModeAdjust: (Long) -> Unit,
 ) {
     val settings = timer.settings
     var isDragging by remember { mutableStateOf(false) }
+    val minimalControlsInteractable = !isCleanModeActive || minimalUiAlpha > 0.99f
 
     Box(
         modifier = Modifier
@@ -749,6 +753,7 @@ private fun PortraitLayout(
                 timer = timer,
                 isCleanModeActive = isCleanModeActive,
                 minimalUiAlpha = minimalUiAlpha,
+                enabled = minimalControlsInteractable,
                 onOpenLog = onOpenLog,
             )
 
@@ -758,6 +763,7 @@ private fun PortraitLayout(
                 timer = timer,
                 isCleanModeActive = isCleanModeActive,
                 minimalUiAlpha = minimalUiAlpha,
+                enabled = minimalControlsInteractable,
                 onNameChipClick = onNameChipClick,
                 onClearPreset = onClearPreset,
             )
@@ -776,9 +782,13 @@ private fun PortraitLayout(
             CleanModeCanvasAdjustBar(
                 visible = isCleanModeActive,
                 controlsAlpha = minimalUiAlpha,
+                enabled = minimalControlsInteractable,
                 positiveOnly = timer.status == TimerStatus.Overtime,
-                onAdjust = { delta -> if (minimalUiAlpha > 0.99f) onCleanModeAdjust(delta) },
+                onAdjust = onCleanModeAdjust,
             )
+            if (isCleanModeActive) {
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             if (!isCleanModeActive) {
                 AnimatedVisibility(visible = timer.status == TimerStatus.Idle) {
@@ -808,24 +818,32 @@ private fun PortraitLayout(
                 }
             }
 
-            val interactable = !isCleanModeActive || minimalUiAlpha > 0.99f
             TimerControls(
                 timer = timer,
                 onAction = { action ->
-                    if (!interactable) return@TimerControls
                     if (action is TimerAction.Start) onStartWithPromptCheck()
                     else onAction(action)
                 },
+                enabled = minimalControlsInteractable,
                 modifier = Modifier
                     .fillMaxWidth()
                     .alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
             )
         } // end bottom overlay Column
 
+        HiddenBottomControlsRestoreLayer(
+            visible = isCleanModeActive && !cleanModeUiAwake && tapToToggleMinimalMode,
+            onRestore = awakenMinimalUi,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+        )
+
         // Gear icon — top-right corner, consistent in both running and non-running modes
-        val settingsInteractable = !isCleanModeActive || minimalUiAlpha > 0.99f
         Surface(
-            onClick = { if (settingsInteractable) onOpenSettings() },
+            onClick = onOpenSettings,
+            enabled = minimalControlsInteractable,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .size(36.dp)
@@ -864,6 +882,7 @@ private fun LandscapeLayout(
 ) {
     val settings = timer.settings
     var isDragging by remember { mutableStateOf(false) }
+    val minimalControlsInteractable = !isCleanModeActive || minimalUiAlpha > 0.99f
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -963,6 +982,7 @@ private fun LandscapeLayout(
                 timer = timer,
                 isCleanModeActive = isCleanModeActive,
                 minimalUiAlpha = minimalUiAlpha,
+                enabled = minimalControlsInteractable,
                 onOpenLog = onOpenLog,
             )
 
@@ -972,6 +992,7 @@ private fun LandscapeLayout(
                 timer = timer,
                 isCleanModeActive = isCleanModeActive,
                 minimalUiAlpha = minimalUiAlpha,
+                enabled = minimalControlsInteractable,
                 onNameChipClick = onNameChipClick,
                 onClearPreset = onClearPreset,
             )
@@ -996,12 +1017,11 @@ private fun LandscapeLayout(
                     )
                 }
             } else {
-                val interactable = minimalUiAlpha > 0.99f
                 SectionCard(modifier = Modifier.alpha(minimalUiAlpha)) {
                     QuickAdjustRow(
                         modifier = Modifier.fillMaxWidth(),
-                        onAdjust = { delta -> if (interactable) onCleanModeAdjust(delta) },
-                        enabled = interactable,
+                        onAdjust = onCleanModeAdjust,
+                        enabled = minimalControlsInteractable,
                         positiveOnly = timer.status == TimerStatus.Overtime,
                     )
                 }
@@ -1009,21 +1029,21 @@ private fun LandscapeLayout(
 
             Spacer(modifier = Modifier.height(8.dp))
             SectionCard(modifier = Modifier.alpha(if (isCleanModeActive) minimalUiAlpha else 1f)) {
-                val interactable = !isCleanModeActive || minimalUiAlpha > 0.99f
                 TimerControls(
                     timer = timer,
                     onAction = { action ->
-                        if (!interactable) return@TimerControls
                         if (action is TimerAction.Start) onStartWithPromptCheck()
                         else onAction(action)
                     },
+                    enabled = minimalControlsInteractable,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
             AssistChip(
-                onClick = { if (!isCleanModeActive || minimalUiAlpha > 0.99f) onOpenSettings() },
+                onClick = onOpenSettings,
+                enabled = minimalControlsInteractable,
                 label = { Text(text = stringResource(R.string.settings)) },
                 modifier = Modifier
                     .align(Alignment.Start)
@@ -1058,6 +1078,7 @@ private fun StatusAndLogRow(
     timer: TimerInstance,
     isCleanModeActive: Boolean,
     minimalUiAlpha: Float,
+    enabled: Boolean,
     onOpenLog: () -> Unit,
 ) {
     Row(
@@ -1086,6 +1107,7 @@ private fun StatusAndLogRow(
 
         Surface(
             onClick = onOpenLog,
+            enabled = enabled,
             shape = CircleShape,
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
             modifier = Modifier.size(36.dp).alpha(if (isCleanModeActive) 0f else 1f),
@@ -1106,10 +1128,10 @@ private fun TimerNameChip(
     timer: TimerInstance,
     isCleanModeActive: Boolean,
     minimalUiAlpha: Float,
+    enabled: Boolean,
     onNameChipClick: () -> Unit,
     onClearPreset: () -> Unit,
 ) {
-    val nameChipInteractable = !isCleanModeActive || minimalUiAlpha > 0.99f
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1118,7 +1140,8 @@ private fun TimerNameChip(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Surface(
-            onClick = { if (nameChipInteractable) onNameChipClick() },
+            onClick = onNameChipClick,
+            enabled = enabled,
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
@@ -1161,7 +1184,8 @@ private fun TimerNameChip(
         }
         if (timer.activePresetId != null) {
             Surface(
-                onClick = { if (nameChipInteractable) onClearPreset() },
+                onClick = onClearPreset,
+                enabled = enabled,
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
                 modifier = Modifier.size(36.dp),
@@ -1906,6 +1930,7 @@ private fun DefaultTimerSettingsSection(
 private fun CleanModeCanvasAdjustBar(
     visible: Boolean,
     controlsAlpha: Float,
+    enabled: Boolean,
     positiveOnly: Boolean,
     onAdjust: (Long) -> Unit,
 ) {
@@ -1918,22 +1943,41 @@ private fun CleanModeCanvasAdjustBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (!positiveOnly) {
-            CanvasAdjustButton(label = "−5 min", modifier = Modifier.weight(1f), onClick = { onAdjust(-5 * 60_000L) })
-            CanvasAdjustButton(label = "−1 min", modifier = Modifier.weight(1f), onClick = { onAdjust(-1 * 60_000L) })
+            CanvasAdjustButton(label = "−5 min", enabled = enabled, modifier = Modifier.weight(1f), onClick = { onAdjust(-5 * 60_000L) })
+            CanvasAdjustButton(label = "−1 min", enabled = enabled, modifier = Modifier.weight(1f), onClick = { onAdjust(-1 * 60_000L) })
         }
-        CanvasAdjustButton(label = "+1 min", modifier = Modifier.weight(1f), onClick = { onAdjust(1 * 60_000L) })
-        CanvasAdjustButton(label = "+5 min", modifier = Modifier.weight(1f), onClick = { onAdjust(5 * 60_000L) })
+        CanvasAdjustButton(label = "+1 min", enabled = enabled, modifier = Modifier.weight(1f), onClick = { onAdjust(1 * 60_000L) })
+        CanvasAdjustButton(label = "+5 min", enabled = enabled, modifier = Modifier.weight(1f), onClick = { onAdjust(5 * 60_000L) })
     }
+}
+
+@Composable
+private fun HiddenBottomControlsRestoreLayer(
+    visible: Boolean,
+    onRestore: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (!visible) return
+
+    Box(
+        modifier = modifier
+            .height(148.dp)
+            .pointerInput(onRestore) {
+                detectTapGestures(onTap = { onRestore() })
+            },
+    )
 }
 
 @Composable
 private fun CanvasAdjustButton(
     label: String,
+    enabled: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier.height(56.dp),
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
