@@ -689,7 +689,8 @@ private fun PortraitLayout(
             onDurationSelected = { onAction(TimerAction.SetDuration(it)) },
             onCenterTap = {
                 when (timer.status) {
-                    TimerStatus.Idle    -> onStartWithPromptCheck()
+                    TimerStatus.Idle    -> if (timer.selectedDurationMillis == 0L) onOpenDurationPicker()
+                                          else onStartWithPromptCheck()
                     TimerStatus.Running -> onAction(TimerAction.Pause())
                     TimerStatus.Paused  -> onAction(TimerAction.Resume())
                     else                -> {}
@@ -929,7 +930,8 @@ private fun LandscapeLayout(
                 onDurationSelected = { onAction(TimerAction.SetDuration(it)) },
                 onCenterTap = {
                     when (timer.status) {
-                        TimerStatus.Idle    -> onStartWithPromptCheck()
+                        TimerStatus.Idle    -> if (timer.selectedDurationMillis == 0L) onOpenDurationPicker()
+                                              else onStartWithPromptCheck()
                         TimerStatus.Running -> onAction(TimerAction.Pause())
                         TimerStatus.Paused  -> onAction(TimerAction.Resume())
                         else                -> {}
