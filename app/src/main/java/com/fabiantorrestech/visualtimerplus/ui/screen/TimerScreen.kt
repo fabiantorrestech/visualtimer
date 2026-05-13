@@ -2,6 +2,7 @@ package com.fabiantorrestech.visualtimerplus.ui.screen
 
 import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -671,6 +672,7 @@ private fun PortraitLayout(
     onCleanModeAdjust: (Long) -> Unit,
 ) {
     val settings = timer.settings
+    var isDragging by remember { mutableStateOf(false) }
     val sheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.PartiallyExpanded,
         skipHiddenState = true,
@@ -770,16 +772,49 @@ private fun PortraitLayout(
                 .padding(top = 16.dp, bottom = 164.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            val clockAlpha = if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f
             if (showTopClock) {
-                Box(
-                    modifier = Modifier.alpha(
-                        if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f,
-                    ),
-                ) {
-                    CurrentTimeText(
-                        showSeconds = settings.showClockSecondsEnabled,
-                        clockPosition = settings.clockPosition,
-                        clockTextSizeSp = settings.clockTextSizeSp,
+                Box(modifier = Modifier.alpha(clockAlpha)) {
+                    Crossfade(targetState = isDragging, label = "portraitDragReadout") { dragging ->
+                        if (dragging) {
+                            Text(
+                                text = timer.displayMillis.formatClockTime(),
+                                style = MaterialTheme.typography.headlineLarge.copy(
+                                    fontSize = settings.clockTextSizeSp.sp,
+                                    lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
+                                ),
+                                color = Color(0xFFF59E0B),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = when (settings.clockPosition) {
+                                    ClockPosition.Left -> TextAlign.Start
+                                    ClockPosition.Center -> TextAlign.Center
+                                    ClockPosition.Right -> TextAlign.End
+                                },
+                            )
+                        } else {
+                            CurrentTimeText(
+                                showSeconds = settings.showClockSecondsEnabled,
+                                clockPosition = settings.clockPosition,
+                                clockTextSizeSp = settings.clockTextSizeSp,
+                            )
+                        }
+                    }
+                }
+            } else {
+                AnimatedVisibility(visible = isDragging) {
+                    Text(
+                        text = timer.displayMillis.formatClockTime(),
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            fontSize = settings.clockTextSizeSp.sp,
+                            lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
+                        ),
+                        color = Color(0xFFF59E0B),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = when (settings.clockPosition) {
+                            ClockPosition.Left -> TextAlign.Start
+                            ClockPosition.Center -> TextAlign.Center
+                            ClockPosition.Right -> TextAlign.End
+                        },
                     )
                 }
             }
@@ -798,7 +833,7 @@ private fun PortraitLayout(
                 )
             }
 
-            val showAnyTopRow = showTopClock || showEndTime
+            val showAnyTopRow = showTopClock || showEndTime || isDragging
             if (showAnyTopRow) Spacer(modifier = Modifier.height(4.dp))
             else Spacer(modifier = Modifier.height(16.dp))
 
@@ -828,6 +863,7 @@ private fun PortraitLayout(
                 onCenterTap = onOpenDurationPicker,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 isOledMode = appState.isOledMode,
+                onDragActiveChanged = { isDragging = it },
             )
 
             // Label below the timer card; the bottom sheet slides up and covers it.
@@ -859,6 +895,7 @@ private fun LandscapeLayout(
     onCleanModeAdjust: (Long) -> Unit,
 ) {
     val settings = timer.settings
+    var isDragging by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -877,6 +914,7 @@ private fun LandscapeLayout(
                 onCenterTap = onOpenDurationPicker,
                 modifier = Modifier.fillMaxSize(),
                 isOledMode = appState.isOledMode,
+                onDragActiveChanged = { isDragging = it },
             )
         }
 
@@ -893,11 +931,47 @@ private fun LandscapeLayout(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (showTopClock) {
-                CurrentTimeText(
-                    showSeconds = settings.showClockSecondsEnabled,
-                    clockPosition = settings.clockPosition,
-                    clockTextSizeSp = settings.clockTextSizeSp,
-                )
+                Crossfade(targetState = isDragging, label = "landscapeDragReadout") { dragging ->
+                    if (dragging) {
+                        Text(
+                            text = timer.displayMillis.formatClockTime(),
+                            style = MaterialTheme.typography.headlineLarge.copy(
+                                fontSize = settings.clockTextSizeSp.sp,
+                                lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
+                            ),
+                            color = Color(0xFFF59E0B),
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = when (settings.clockPosition) {
+                                ClockPosition.Left -> TextAlign.Start
+                                ClockPosition.Center -> TextAlign.Center
+                                ClockPosition.Right -> TextAlign.End
+                            },
+                        )
+                    } else {
+                        CurrentTimeText(
+                            showSeconds = settings.showClockSecondsEnabled,
+                            clockPosition = settings.clockPosition,
+                            clockTextSizeSp = settings.clockTextSizeSp,
+                        )
+                    }
+                }
+            } else {
+                AnimatedVisibility(visible = isDragging) {
+                    Text(
+                        text = timer.displayMillis.formatClockTime(),
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            fontSize = settings.clockTextSizeSp.sp,
+                            lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
+                        ),
+                        color = Color(0xFFF59E0B),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = when (settings.clockPosition) {
+                            ClockPosition.Left -> TextAlign.Start
+                            ClockPosition.Center -> TextAlign.Center
+                            ClockPosition.Right -> TextAlign.End
+                        },
+                    )
+                }
             }
 
             val showEndTimeLandscape = settings.showEndTimeEnabled &&
@@ -1174,6 +1248,7 @@ private fun HeroTimerCard(
     onCenterTap: () -> Unit,
     modifier: Modifier = Modifier,
     isOledMode: Boolean = false,
+    onDragActiveChanged: (Boolean) -> Unit = {},
 ) {
     // Drive countdown text at wall-clock second boundaries so it ticks in sync with CurrentTimeText.
     var syncedCountdownText by remember { mutableStateOf(timer.displayMillis.formatClockTime()) }
@@ -1207,6 +1282,7 @@ private fun HeroTimerCard(
             timer = timer,
             onDurationSelected = onDurationSelected,
             isOledMode = isOledMode,
+            onDragActiveChanged = onDragActiveChanged,
         )
         Surface(
             onClick = onCenterTap,
@@ -1342,12 +1418,27 @@ private fun SettingsSheetContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = stringResource(R.string.current_timer_settings),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
+        var currentSettingsExpanded by remember { mutableStateOf(false) }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { currentSettingsExpanded = !currentSettingsExpanded },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.current_timer_settings),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = if (currentSettingsExpanded) "▲" else "▼",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        AnimatedVisibility(visible = currentSettingsExpanded) {
+        Column {
         Spacer(modifier = Modifier.height(8.dp))
 
         // ── Per-timer sound & vibration settings ──────────────────────────────
@@ -1560,6 +1651,8 @@ private fun SettingsSheetContent(
                 onCheckedChange = { onAction(TimerAction.SetPromptBeforeStart(it)) },
             )
         }
+        } // Column
+        } // AnimatedVisibility(currentSettingsExpanded)
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -1621,6 +1714,9 @@ private fun DefaultTimerSettingsSection(
     onSettingsChanged: (com.fabiantorrestech.visualtimerplus.timer.TimerSettings) -> Unit,
     onSetDefaultDuration: () -> Unit,
 ) {
+    // Local draft: changes accumulate here and are committed only on "Save Defaults"
+    var draft by remember { mutableStateOf(defaultSettings) }
+
     SectionCard(title = stringResource(R.string.default_timer_settings_title)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1652,75 +1748,75 @@ private fun DefaultTimerSettingsSection(
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(
             label = stringResource(R.string.sound),
-            checked = defaultSettings.soundEnabled,
-            onCheckedChange = { onSettingsChanged(defaultSettings.copy(soundEnabled = it)) },
+            checked = draft.soundEnabled,
+            onCheckedChange = { draft = draft.copy(soundEnabled = it) },
         )
-        if (defaultSettings.soundEnabled) {
+        if (draft.soundEnabled) {
             Spacer(modifier = Modifier.height(12.dp))
             FinishedSoundRouteSelector(
-                selectedRoute = defaultSettings.finishedSoundRoute,
-                onRouteSelected = { onSettingsChanged(defaultSettings.copy(finishedSoundRoute = it)) },
+                selectedRoute = draft.finishedSoundRoute,
+                onRouteSelected = { draft = draft.copy(finishedSoundRoute = it) },
             )
             Spacer(modifier = Modifier.height(12.dp))
             FinishedSoundVolumeSlider(
-                volumePercent = defaultSettings.finishedSoundVolumePercent,
-                onVolumeChanged = { onSettingsChanged(defaultSettings.copy(finishedSoundVolumePercent = it)) },
+                volumePercent = draft.finishedSoundVolumePercent,
+                onVolumeChanged = { draft = draft.copy(finishedSoundVolumePercent = it) },
             )
             Spacer(modifier = Modifier.height(12.dp))
             PreferenceToggle(
                 label = stringResource(R.string.ignore_silent_mode),
-                checked = defaultSettings.ignoreSilentMode,
-                onCheckedChange = { onSettingsChanged(defaultSettings.copy(ignoreSilentMode = it)) },
+                checked = draft.ignoreSilentMode,
+                onCheckedChange = { draft = draft.copy(ignoreSilentMode = it) },
             )
             Spacer(modifier = Modifier.height(12.dp))
             PreferenceToggle(
                 label = stringResource(R.string.override_muted_system_volume),
-                checked = defaultSettings.overrideMutedSystemVolume,
-                onCheckedChange = { onSettingsChanged(defaultSettings.copy(overrideMutedSystemVolume = it)) },
+                checked = draft.overrideMutedSystemVolume,
+                onCheckedChange = { draft = draft.copy(overrideMutedSystemVolume = it) },
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
         FinishedVibrationSelector(
-            selectedMode = defaultSettings.finishedVibrationMode,
-            onModeSelected = { onSettingsChanged(defaultSettings.copy(finishedVibrationMode = it)) },
+            selectedMode = draft.finishedVibrationMode,
+            onModeSelected = { draft = draft.copy(finishedVibrationMode = it) },
         )
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(
             label = stringResource(R.string.keep_screen_awake),
-            checked = defaultSettings.keepScreenAwake,
-            onCheckedChange = { onSettingsChanged(defaultSettings.copy(keepScreenAwake = it)) },
+            checked = draft.keepScreenAwake,
+            onCheckedChange = { draft = draft.copy(keepScreenAwake = it) },
         )
         Spacer(modifier = Modifier.height(12.dp))
         SizeSlider(
             label = stringResource(R.string.center_time_size),
-            value = defaultSettings.centerTimeSizeSp,
-            onValueChange = { onSettingsChanged(defaultSettings.copy(centerTimeSizeSp = it)) },
+            value = draft.centerTimeSizeSp,
+            onValueChange = { draft = draft.copy(centerTimeSizeSp = it) },
             valueRange = 20f..80f,
             defaultValue = 36f,
         )
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(
             label = stringResource(R.string.show_current_time),
-            checked = defaultSettings.showCurrentTimeEnabled,
-            onCheckedChange = { onSettingsChanged(defaultSettings.copy(showCurrentTimeEnabled = it, showClockSecondsEnabled = if (it) defaultSettings.showClockSecondsEnabled else false)) },
+            checked = draft.showCurrentTimeEnabled,
+            onCheckedChange = { draft = draft.copy(showCurrentTimeEnabled = it, showClockSecondsEnabled = if (it) draft.showClockSecondsEnabled else false) },
         )
-        if (defaultSettings.showCurrentTimeEnabled) {
+        if (draft.showCurrentTimeEnabled) {
             Spacer(modifier = Modifier.height(12.dp))
             PreferenceToggle(
                 label = stringResource(R.string.show_seconds),
-                checked = defaultSettings.showClockSecondsEnabled,
-                onCheckedChange = { onSettingsChanged(defaultSettings.copy(showClockSecondsEnabled = it)) },
+                checked = draft.showClockSecondsEnabled,
+                onCheckedChange = { draft = draft.copy(showClockSecondsEnabled = it) },
             )
             Spacer(modifier = Modifier.height(12.dp))
             ClockPositionSelector(
-                selectedPosition = defaultSettings.clockPosition,
-                onPositionSelected = { onSettingsChanged(defaultSettings.copy(clockPosition = it)) },
+                selectedPosition = draft.clockPosition,
+                onPositionSelected = { draft = draft.copy(clockPosition = it) },
             )
             Spacer(modifier = Modifier.height(12.dp))
             SizeSlider(
                 label = stringResource(R.string.clock_size),
-                value = defaultSettings.clockTextSizeSp,
-                onValueChange = { onSettingsChanged(defaultSettings.copy(clockTextSizeSp = it)) },
+                value = draft.clockTextSizeSp,
+                onValueChange = { draft = draft.copy(clockTextSizeSp = it) },
                 valueRange = 14f..60f,
                 defaultValue = 32f,
             )
@@ -1728,21 +1824,21 @@ private fun DefaultTimerSettingsSection(
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(
             label = stringResource(R.string.show_end_time),
-            checked = defaultSettings.showEndTimeEnabled,
-            onCheckedChange = { onSettingsChanged(defaultSettings.copy(showEndTimeEnabled = it)) },
+            checked = draft.showEndTimeEnabled,
+            onCheckedChange = { draft = draft.copy(showEndTimeEnabled = it) },
         )
-        if (defaultSettings.showEndTimeEnabled) {
+        if (draft.showEndTimeEnabled) {
             Spacer(modifier = Modifier.height(12.dp))
             PreferenceToggle(
                 label = stringResource(R.string.show_end_time_seconds),
-                checked = defaultSettings.showEndTimeSecondsEnabled,
-                onCheckedChange = { onSettingsChanged(defaultSettings.copy(showEndTimeSecondsEnabled = it)) },
+                checked = draft.showEndTimeSecondsEnabled,
+                onCheckedChange = { draft = draft.copy(showEndTimeSecondsEnabled = it) },
             )
             Spacer(modifier = Modifier.height(12.dp))
             SizeSlider(
                 label = stringResource(R.string.end_time_size),
-                value = defaultSettings.endTimeSizeSp,
-                onValueChange = { onSettingsChanged(defaultSettings.copy(endTimeSizeSp = it)) },
+                value = draft.endTimeSizeSp,
+                onValueChange = { draft = draft.copy(endTimeSizeSp = it) },
                 valueRange = 14f..60f,
                 defaultValue = 32f,
             )
@@ -1750,58 +1846,58 @@ private fun DefaultTimerSettingsSection(
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(
             label = stringResource(R.string.clockwise_mode),
-            checked = defaultSettings.clockwiseModeEnabled,
-            onCheckedChange = { onSettingsChanged(defaultSettings.copy(clockwiseModeEnabled = it)) },
+            checked = draft.clockwiseModeEnabled,
+            onCheckedChange = { draft = draft.copy(clockwiseModeEnabled = it) },
         )
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(
             label = stringResource(R.string.full_clock_mode),
-            checked = defaultSettings.fullClockMode,
-            onCheckedChange = { onSettingsChanged(defaultSettings.copy(fullClockMode = it)) },
+            checked = draft.fullClockMode,
+            onCheckedChange = { draft = draft.copy(fullClockMode = it) },
         )
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(
             label = stringResource(R.string.clean_mode),
-            checked = defaultSettings.cleanModeEnabled,
-            onCheckedChange = { onSettingsChanged(defaultSettings.copy(cleanModeEnabled = it)) },
+            checked = draft.cleanModeEnabled,
+            onCheckedChange = { draft = draft.copy(cleanModeEnabled = it) },
         )
-        if (defaultSettings.cleanModeEnabled) {
+        if (draft.cleanModeEnabled) {
             Spacer(modifier = Modifier.height(12.dp))
             PreferenceToggle(
                 label = stringResource(R.string.clean_mode_auto_dismiss_enabled),
-                checked = defaultSettings.cleanModeAutoDismissEnabled,
-                onCheckedChange = { onSettingsChanged(defaultSettings.copy(cleanModeAutoDismissEnabled = it)) },
+                checked = draft.cleanModeAutoDismissEnabled,
+                onCheckedChange = { draft = draft.copy(cleanModeAutoDismissEnabled = it) },
             )
-            if (defaultSettings.cleanModeAutoDismissEnabled) {
+            if (draft.cleanModeAutoDismissEnabled) {
                 Spacer(modifier = Modifier.height(12.dp))
                 SizeSlider(
                     label = stringResource(R.string.clean_mode_auto_dismiss_time),
-                    value = defaultSettings.cleanModeAutoDismissSeconds.toFloat(),
-                    onValueChange = { onSettingsChanged(defaultSettings.copy(cleanModeAutoDismissSeconds = it.roundToInt())) },
+                    value = draft.cleanModeAutoDismissSeconds.toFloat(),
+                    onValueChange = { draft = draft.copy(cleanModeAutoDismissSeconds = it.roundToInt()) },
                     valueRange = CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS.toFloat()..CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS.toFloat(),
                     defaultValue = CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS.toFloat(),
                     steps = CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS - CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS - 1,
-                    valueText = "${defaultSettings.cleanModeAutoDismissSeconds}s",
+                    valueText = "${draft.cleanModeAutoDismissSeconds}s",
                 )
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(
             label = stringResource(R.string.timer_title_enabled),
-            checked = defaultSettings.timerTitleEnabled,
-            onCheckedChange = { onSettingsChanged(defaultSettings.copy(timerTitleEnabled = it)) },
+            checked = draft.timerTitleEnabled,
+            onCheckedChange = { draft = draft.copy(timerTitleEnabled = it) },
         )
-        if (defaultSettings.timerTitleEnabled) {
+        if (draft.timerTitleEnabled) {
             Spacer(modifier = Modifier.height(12.dp))
             TitlePositionSelector(
-                selectedPosition = defaultSettings.timerTitlePosition,
-                onPositionSelected = { onSettingsChanged(defaultSettings.copy(timerTitlePosition = it)) },
+                selectedPosition = draft.timerTitlePosition,
+                onPositionSelected = { draft = draft.copy(timerTitlePosition = it) },
             )
             Spacer(modifier = Modifier.height(12.dp))
             SizeSlider(
                 label = stringResource(R.string.timer_title_size),
-                value = defaultSettings.timerTitleTextSizeSp,
-                onValueChange = { onSettingsChanged(defaultSettings.copy(timerTitleTextSizeSp = it)) },
+                value = draft.timerTitleTextSizeSp,
+                onValueChange = { draft = draft.copy(timerTitleTextSizeSp = it) },
                 valueRange = 10f..48f,
                 defaultValue = 16f,
             )
@@ -1809,9 +1905,23 @@ private fun DefaultTimerSettingsSection(
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(
             label = stringResource(R.string.prompt_before_start),
-            checked = defaultSettings.promptBeforeStart,
-            onCheckedChange = { onSettingsChanged(defaultSettings.copy(promptBeforeStart = it)) },
+            checked = draft.promptBeforeStart,
+            onCheckedChange = { draft = draft.copy(promptBeforeStart = it) },
         )
+        Spacer(modifier = Modifier.height(16.dp))
+        Surface(
+            onClick = { onSettingsChanged(draft) },
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier.align(Alignment.End),
+        ) {
+            Text(
+                text = stringResource(R.string.save_defaults),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
     }
 }
 
@@ -2200,39 +2310,39 @@ private fun EndTimeText(
     modifier: Modifier = Modifier,
 ) {
     val formatter = rememberClockFormatter(if (showSeconds) "h:mm:ss a" else "h:mm a")
+
+    // Ticks once per second so end time stays live (both as clock advances and as duration changes during drag)
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val ms = System.currentTimeMillis()
+            delay(1_000L - (ms % 1_000L))
+            now = System.currentTimeMillis()
+        }
+    }
+
     val endMillis = when (timer.status) {
-        TimerStatus.Running  -> timer.targetEndTimeMillis
-        TimerStatus.Paused   -> System.currentTimeMillis() + (timer.pausedRemainingMillis ?: timer.remainingMillis)
-        TimerStatus.Idle     -> System.currentTimeMillis() + timer.selectedDurationMillis
-        else                 -> null
+        TimerStatus.Running -> timer.targetEndTimeMillis ?: (now + timer.remainingMillis)
+        TimerStatus.Paused  -> now + (timer.pausedRemainingMillis ?: timer.remainingMillis)
+        TimerStatus.Idle    -> now + timer.selectedDurationMillis
+        else                -> null
     } ?: return
-    var endText by remember(endMillis / 60_000, showSeconds) {
+
+    // Re-derive the formatted string only when the visible minute (or second) boundary changes
+    val endText = remember(endMillis / (if (showSeconds) 1_000L else 60_000L), showSeconds) {
         val time = java.time.Instant.ofEpochMilli(endMillis)
             .atZone(java.time.ZoneId.systemDefault())
             .toLocalTime()
-        mutableStateOf("→ ${time.format(formatter)}")
+        time.format(formatter)
     }
-    LaunchedEffect(endMillis, showSeconds) {
-        while (true) {
-            val time = java.time.Instant.ofEpochMilli(endMillis)
-                .atZone(java.time.ZoneId.systemDefault())
-                .toLocalTime()
-            endText = "→ ${time.format(formatter)}"
-            if (showSeconds) {
-                val ms = System.currentTimeMillis()
-                delay(1_000L - (ms % 1_000L))
-            } else {
-                delay(30_000L)
-            }
-        }
-    }
+
     Text(
         text = endText,
         style = MaterialTheme.typography.headlineLarge.copy(
             fontSize = textSizeSp.sp,
             lineHeight = (textSizeSp * 1.2f).sp,
         ),
-        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.76f),
+        color = Color(0xFFF59E0B),
         modifier = modifier.fillMaxWidth(),
         textAlign = when (clockPosition) {
             ClockPosition.Left   -> TextAlign.Start

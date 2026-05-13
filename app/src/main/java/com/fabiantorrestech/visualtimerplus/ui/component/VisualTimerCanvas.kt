@@ -14,8 +14,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -40,6 +40,7 @@ fun VisualTimerCanvas(
     onDurationSelected: (Long) -> Unit,
     modifier: Modifier = Modifier,
     isOledMode: Boolean = false,
+    onDragActiveChanged: (Boolean) -> Unit = {},
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val displayMs = timer.displayMillis
@@ -88,7 +89,9 @@ fun VisualTimerCanvas(
         }
     }
 
-    var dragLap by remember { mutableIntStateOf(0) }
+    val currentTimer by rememberUpdatedState(timer)
+
+    var totalAngle by remember { mutableFloatStateOf(0f) }
     var prevAngle by remember { mutableFloatStateOf(0f) }
 
     Box(
@@ -97,42 +100,33 @@ fun VisualTimerCanvas(
             detectDragGestures(
                 onDragStart = { offset ->
                     val angle = toDirectionalAngle(
-                        offset, size.width.toFloat(), size.height.toFloat(), timer.settings.clockwiseModeEnabled,
+                        offset, size.width.toFloat(), size.height.toFloat(), currentTimer.settings.clockwiseModeEnabled,
                     )
                     prevAngle = angle
-                    dragLap = if (timer.displayMillis >= ONE_HOUR_MILLIS) 1 else 0
+                    // Initialize from current duration — prevents a jump when the touch
+                    // position doesn't match the handle position (e.g. touching at 2:00:00).
+                    // Uses rememberUpdatedState so the second drag reads the updated duration,
+                    // not the stale value captured when pointerInput was first launched.
+                    totalAngle = currentTimer.displayMillis.toFloat() / ONE_HOUR_MILLIS.toFloat() * 360f
+                    onDragActiveChanged(true)
                 },
+                onDragEnd = { onDragActiveChanged(false) },
+                onDragCancel = { onDragActiveChanged(false) },
                 onDrag = { change, _ ->
                     val newAngle = toDirectionalAngle(
-                        change.position, size.width.toFloat(), size.height.toFloat(), timer.settings.clockwiseModeEnabled,
+                        change.position, size.width.toFloat(), size.height.toFloat(), currentTimer.settings.clockwiseModeEnabled,
                     )
-                    var setToZero = false
-                    var setToMax = false
-                    if (prevAngle > 270f && newAngle < 90f) {
-                        if (dragLap < 1) {
-                            dragLap++
-                        } else {
-                            // Already at max lap — clamp instead of wrapping angle back to near-zero
-                            setToMax = true
-                        }
-                    } else if (prevAngle < 90f && newAngle > 270f) {
-                        if (dragLap > 0) {
-                            dragLap--
-                        } else {
-                            setToZero = true
-                        }
-                    }
-                    // Pin prevAngle to prevent crossing re-trigger on the next event
-                    prevAngle = when {
-                        setToZero -> 0f
-                        setToMax -> 359f
-                        else -> newAngle
-                    }
-                    onDurationSelected(when {
-                        setToZero -> 0L
-                        setToMax -> DRAG_MAX_MILLIS
-                        else -> computeDragDuration(newAngle, dragLap)
-                    })
+                    // Shortest-path delta handles the 0°/360° wrap-around without any
+                    // threshold checks, making boundary crossing robust against fast swipes
+                    var delta = newAngle - prevAngle
+                    if (delta > 180f) delta -= 360f
+                    if (delta < -180f) delta += 360f
+
+                    totalAngle = (totalAngle + delta).coerceIn(0f, 720f)
+                    prevAngle = newAngle
+
+                    val rawMs = totalAngle / 360f * ONE_HOUR_MILLIS
+                    onDurationSelected(snapDuration(clampDuration(rawMs.toLong()).coerceAtMost(DRAG_MAX_MILLIS)))
                 },
             )
         },
@@ -185,7 +179,7 @@ fun VisualTimerCanvas(
 
             // Handle dot
             val handleFraction = if (showTwoLayer) overlayArcFraction else baseArcFraction
-            if (handleFraction > 0f || displayMs > 0L) {
+            if (handleFraction > 0f || timer.status == TimerStatus.Idle || timer.status == TimerStatus.Paused) {
                 val handleAngleRad = Math.toRadians(
                     ((-90f + sweepSign * 360f * handleFraction).toDouble()),
                 )
@@ -208,10 +202,4 @@ private fun toDirectionalAngle(offset: Offset, width: Float, height: Float, cloc
     val rawAngle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
     val normalizedAngle = (rawAngle + 450f) % 360f
     return if (clockwise) normalizedAngle else (360f - normalizedAngle) % 360f
-}
-
-private fun computeDragDuration(angle: Float, lap: Int): Long {
-    val fraction = angle / 360f
-    val raw = (fraction + lap) * ONE_HOUR_MILLIS
-    return snapDuration(clampDuration(raw.toLong()).coerceAtMost(DRAG_MAX_MILLIS))
 }
