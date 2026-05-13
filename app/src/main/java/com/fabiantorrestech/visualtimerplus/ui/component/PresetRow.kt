@@ -16,8 +16,7 @@ import androidx.compose.ui.unit.dp
 import java.util.Locale
 
 private val presetMinutes = listOf(
-    listOf(5, 10, 15),
-    listOf(30, 45, 60),
+    listOf(15, 30, 45),
 )
 
 @Composable

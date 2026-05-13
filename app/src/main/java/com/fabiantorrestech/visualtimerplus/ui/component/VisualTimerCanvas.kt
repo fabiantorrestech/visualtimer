@@ -1,10 +1,13 @@
 package com.fabiantorrestech.visualtimerplus.ui.component
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -12,8 +15,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -91,28 +96,78 @@ fun VisualTimerCanvas(
 
     val currentTimer by rememberUpdatedState(timer)
 
+    val startFillAnim = remember { Animatable(-1f) }
+    var prevStatus by remember { mutableStateOf(timer.status) }
+
+    LaunchedEffect(timer.status) {
+        if (timer.status == TimerStatus.Running && prevStatus == TimerStatus.Idle) {
+            val target = if (timer.settings.fullClockMode) 1f
+                         else (timer.selectedDurationMillis.toFloat() / ONE_HOUR_MILLIS.toFloat()).coerceIn(0f, 1f)
+            startFillAnim.snapTo(0f)
+            startFillAnim.animateTo(target, animationSpec = tween(700, easing = FastOutSlowInEasing))
+            startFillAnim.snapTo(-1f)
+        }
+        prevStatus = timer.status
+    }
+
+    val isStartAnimating = startFillAnim.value >= 0f
+    val effectiveShowTwoLayer = if (isStartAnimating) false else showTwoLayer
+    val effectiveBaseArcFraction = if (isStartAnimating) startFillAnim.value else baseArcFraction
+    val effectiveOverlayArcFraction = if (isStartAnimating) 0f else overlayArcFraction
+
     var totalAngle by remember { mutableFloatStateOf(0f) }
     var prevAngle by remember { mutableFloatStateOf(0f) }
 
     Box(
         modifier = modifier.pointerInput(timer.status, timer.settings.clockwiseModeEnabled) {
             if (timer.status != TimerStatus.Idle && timer.status != TimerStatus.Paused) return@pointerInput
-            detectDragGestures(
-                onDragStart = { offset ->
-                    val angle = toDirectionalAngle(
-                        offset, size.width.toFloat(), size.height.toFloat(), currentTimer.settings.clockwiseModeEnabled,
-                    )
-                    prevAngle = angle
-                    // Initialize from current duration — prevents a jump when the touch
-                    // position doesn't match the handle position (e.g. touching at 2:00:00).
-                    // Uses rememberUpdatedState so the second drag reads the updated duration,
-                    // not the stale value captured when pointerInput was first launched.
-                    totalAngle = currentTimer.displayMillis.toFloat() / ONE_HOUR_MILLIS.toFloat() * 360f
-                    onDragActiveChanged(true)
-                },
-                onDragEnd = { onDragActiveChanged(false) },
-                onDragCancel = { onDragActiveChanged(false) },
-                onDrag = { change, _ ->
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val startPos = down.position
+
+                // If touch starts inside the circle, claim winding immediately.
+                // Outside the circle, use direction-based intent detection so horizontal
+                // swipes on the margin still reach the pager.
+                val circleCenter = Offset(size.width / 2f, size.height / 2f)
+                val circleRadius = min(size.width, size.height) / 2f
+                val touchedInsideCircle = (down.position - circleCenter).getDistance() <= circleRadius
+
+                var claimedForWinding = touchedInsideCircle
+                if (!touchedInsideCircle) {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed || change.isConsumed) break
+
+                        val dragOffset = change.position - startPos
+                        if (dragOffset.getDistance() > viewConfiguration.touchSlop) {
+                            val isHorizontalSwipe = kotlin.math.abs(dragOffset.x) > kotlin.math.abs(dragOffset.y) * 2f
+                            if (!isHorizontalSwipe) {
+                                change.consume()
+                                claimedForWinding = true
+                            }
+                            break
+                        }
+                    }
+                }
+                if (!claimedForWinding) return@awaitEachGesture
+
+                // Initialize winding state — same logic as former onDragStart.
+                // Uses rememberUpdatedState so a second drag reads the updated duration,
+                // not the stale value captured when pointerInput was first launched.
+                prevAngle = toDirectionalAngle(
+                    down.position, size.width.toFloat(), size.height.toFloat(), currentTimer.settings.clockwiseModeEnabled,
+                )
+                totalAngle = currentTimer.displayMillis.toFloat() / ONE_HOUR_MILLIS.toFloat() * 360f
+                onDragActiveChanged(true)
+
+                // Track drag — same logic as former onDrag.
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed) break
+                    change.consume()
+
                     val newAngle = toDirectionalAngle(
                         change.position, size.width.toFloat(), size.height.toFloat(), currentTimer.settings.clockwiseModeEnabled,
                     )
@@ -121,14 +176,13 @@ fun VisualTimerCanvas(
                     var delta = newAngle - prevAngle
                     if (delta > 180f) delta -= 360f
                     if (delta < -180f) delta += 360f
-
                     totalAngle = (totalAngle + delta).coerceIn(0f, 720f)
                     prevAngle = newAngle
-
                     val rawMs = totalAngle / 360f * ONE_HOUR_MILLIS
                     onDurationSelected(snapDuration(clampDuration(rawMs.toLong()).coerceAtMost(DRAG_MAX_MILLIS)))
-                },
-            )
+                }
+                onDragActiveChanged(false)
+            }
         },
     ) {
         Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = canvasAlpha }) {
@@ -143,26 +197,26 @@ fun VisualTimerCanvas(
 
             drawCircle(color = trackColor, radius = radius, center = center)
 
-            if (showTwoLayer) {
+            if (effectiveShowTwoLayer) {
                 // Base layer: full dark-red circle = 60 min base
                 drawCircle(color = TimerRedDark, radius = radius, center = center)
                 // Overlay layer: bright-red arc for time above 60 min
-                if (overlayArcFraction > 0f) {
+                if (effectiveOverlayArcFraction > 0f) {
                     drawArc(
                         color = TimerRed,
                         startAngle = -90f,
-                        sweepAngle = sweepSign * 360f * overlayArcFraction,
+                        sweepAngle = sweepSign * 360f * effectiveOverlayArcFraction,
                         useCenter = true,
                         topLeft = arcTopLeft,
                         size = arcSize,
                     )
                 }
             } else {
-                if (baseArcFraction > 0f) {
+                if (effectiveBaseArcFraction > 0f) {
                     drawArc(
                         color = TimerRed,
                         startAngle = -90f,
-                        sweepAngle = sweepSign * 360f * baseArcFraction,
+                        sweepAngle = sweepSign * 360f * effectiveBaseArcFraction,
                         useCenter = true,
                         topLeft = arcTopLeft,
                         size = arcSize,
@@ -178,7 +232,7 @@ fun VisualTimerCanvas(
             )
 
             // Handle dot
-            val handleFraction = if (showTwoLayer) overlayArcFraction else baseArcFraction
+            val handleFraction = if (effectiveShowTwoLayer) effectiveOverlayArcFraction else effectiveBaseArcFraction
             if (handleFraction > 0f || timer.status == TimerStatus.Idle || timer.status == TimerStatus.Paused) {
                 val handleAngleRad = Math.toRadians(
                     ((-90f + sweepSign * 360f * handleFraction).toDouble()),

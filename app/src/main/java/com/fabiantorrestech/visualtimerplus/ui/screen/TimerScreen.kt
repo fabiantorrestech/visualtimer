@@ -45,11 +45,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.material3.rememberStandardBottomSheetState
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.SmallFloatingActionButton
@@ -161,7 +158,6 @@ fun TimerScreen(
     var lastPagerSetActiveIndex by remember { mutableStateOf(appState.activeTimerIndex) }
 
     var cleanModeUiAwake by rememberSaveable { mutableStateOf(false) }
-    var cleanModeControlsExpanded by rememberSaveable { mutableStateOf(false) }
     var cleanModeActivityTick by rememberSaveable { mutableStateOf(0) }
     var cleanModeWasActive by rememberSaveable { mutableStateOf(false) }
 
@@ -184,7 +180,6 @@ fun TimerScreen(
             onAction(TimerAction.SetActiveTimer(pagerState.settledPage))
         }
         cleanModeUiAwake = false
-        cleanModeControlsExpanded = false
         // If the settled page is already running in clean mode, mark as already-initialized so
         // the initial-show flow doesn't fire just because we navigated to a running timer.
         val settledTimer = appState.timers.getOrNull(pagerState.settledPage)
@@ -212,12 +207,10 @@ fun TimerScreen(
     LaunchedEffect(isCleanModeActive, pagerState.isScrollInProgress) {
         if (!isCleanModeActive) {
             cleanModeUiAwake = false
-            cleanModeControlsExpanded = false
             cleanModeWasActive = false
         } else if (!cleanModeWasActive && !pagerState.isScrollInProgress) {
             cleanModeWasActive = true
             cleanModeUiAwake = true
-            cleanModeControlsExpanded = false
             cleanModeActivityTick += 1
         }
     }
@@ -226,7 +219,6 @@ fun TimerScreen(
         if (!isCleanModeActive || !cleanModeUiAwake || !currentPageSettings.cleanModeAutoDismissEnabled) return@LaunchedEffect
         delay(currentPageSettings.cleanModeAutoDismissSeconds * 1_000L)
         cleanModeUiAwake = false
-        cleanModeControlsExpanded = false
     }
 
     if (showDurationPicker) {
@@ -382,8 +374,6 @@ fun TimerScreen(
                             cleanModeUiAwake = !cleanModeUiAwakeState.value
                             if (cleanModeUiAwake) {
                                 cleanModeActivityTick += 1
-                            } else {
-                                cleanModeControlsExpanded = false
                             }
                         }
                     }
@@ -409,7 +399,6 @@ fun TimerScreen(
                         isCleanModeActive = pageIsCleanModeActive,
                         showTopClock = pageShowTopClock,
                         minimalUiAlpha = minimalUiAlpha,
-                        cleanModeControlsExpanded = cleanModeControlsExpanded,
                         cleanModeUiAwake = cleanModeUiAwake,
                         onAction = pagedOnAction,
                         onOpenSettings = { showSettingsSheet = true; awakenMinimalUi() },
@@ -427,14 +416,9 @@ fun TimerScreen(
                         },
                         onAdjust = { pagedOnAction(TimerAction.AdjustDuration(it)) },
                         awakenMinimalUi = ::awakenMinimalUi,
-                        onCleanModeExpand = {
-                            awakenMinimalUi()
-                            cleanModeControlsExpanded = true
-                        },
                         onCleanModeAdjust = { delta ->
                             pagedOnAction(TimerAction.AdjustDuration(delta))
                             awakenMinimalUi()
-                            cleanModeControlsExpanded = false
                         },
                     )
                 } else {
@@ -444,7 +428,6 @@ fun TimerScreen(
                         isCleanModeActive = pageIsCleanModeActive,
                         showTopClock = pageShowTopClock,
                         minimalUiAlpha = minimalUiAlpha,
-                        cleanModeControlsExpanded = cleanModeControlsExpanded,
                         onAction = pagedOnAction,
                         onOpenSettings = { showSettingsSheet = true; awakenMinimalUi() },
                         onOpenLog = onOpenLog,
@@ -462,14 +445,9 @@ fun TimerScreen(
                         onAdjust = { pagedOnAction(TimerAction.AdjustDuration(it)) },
                         awakenMinimalUi = ::awakenMinimalUi,
                         cleanModeUiAwake = cleanModeUiAwake,
-                        onCleanModeExpand = {
-                            awakenMinimalUi()
-                            cleanModeControlsExpanded = true
-                        },
                         onCleanModeAdjust = { delta ->
                             pagedOnAction(TimerAction.AdjustDuration(delta))
                             awakenMinimalUi()
-                            cleanModeControlsExpanded = false
                         },
                     )
                 }
@@ -504,7 +482,7 @@ fun TimerScreen(
                         shape = RoundedCornerShape(12.dp),
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        elevation = FloatingActionButtonDefaults.loweredElevation(),
+                        elevation = FloatingActionButtonDefaults.elevation(),
                     ) {
                         Text(text = "−", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
@@ -515,7 +493,7 @@ fun TimerScreen(
                         shape = RoundedCornerShape(12.dp),
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        elevation = FloatingActionButtonDefaults.loweredElevation(),
+                        elevation = FloatingActionButtonDefaults.elevation(),
                     ) {
                         Text(text = "+", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
@@ -656,7 +634,6 @@ private fun PortraitLayout(
     isCleanModeActive: Boolean,
     showTopClock: Boolean,
     minimalUiAlpha: Float,
-    cleanModeControlsExpanded: Boolean,
     onAction: (TimerAction) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenLog: () -> Unit,
@@ -668,108 +645,39 @@ private fun PortraitLayout(
     onAdjust: (Long) -> Unit,
     awakenMinimalUi: () -> Unit,
     cleanModeUiAwake: Boolean,
-    onCleanModeExpand: () -> Unit,
     onCleanModeAdjust: (Long) -> Unit,
 ) {
     val settings = timer.settings
     var isDragging by remember { mutableStateOf(false) }
-    val sheetState = rememberStandardBottomSheetState(
-        initialValue = SheetValue.PartiallyExpanded,
-        skipHiddenState = true,
-    )
-    val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
 
-    LaunchedEffect(isCleanModeActive, cleanModeUiAwake) {
-        if (isCleanModeActive) sheetState.partialExpand()
-    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(
+                WindowInsets.statusBars
+                    .union(WindowInsets.displayCutout)
+                    .union(WindowInsets.navigationBars),
+            )
+            .padding(horizontal = 20.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Timer arc — anchored at center so top/bottom content never shifts its position
+        HeroTimerCard(
+            timer = timer,
+            displayAlpha = if (isCleanModeActive) minimalUiAlpha else 1f,
+            onDurationSelected = { onAction(TimerAction.SetDuration(it)) },
+            onCenterTap = onOpenDurationPicker,
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+            isOledMode = appState.isOledMode,
+            onDragActiveChanged = { isDragging = it },
+        )
 
-    val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val peekHeight = if (isCleanModeActive && !cleanModeUiAwake) 0.dp else 164.dp + navBarHeight
-    BottomSheetScaffold(
-        scaffoldState = scaffoldState,
-        sheetPeekHeight = peekHeight,
-        containerColor = Color.Transparent,
-        sheetContent = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Spacer(modifier = Modifier.height(4.dp))
-                SectionCard(modifier = Modifier.alpha(if (isCleanModeActive) minimalUiAlpha else 1f)) {
-                    val interactable = !isCleanModeActive || minimalUiAlpha > 0.99f
-                    TimerControls(
-                        timer = timer,
-                        onAction = { action ->
-                            if (!interactable) return@TimerControls
-                            if (action is TimerAction.Start) onStartWithPromptCheck()
-                            else onAction(action)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                AssistChip(
-                    onClick = { if (!isCleanModeActive || minimalUiAlpha > 0.99f) onOpenSettings() },
-                    label = { Text(text = stringResource(R.string.settings)) },
-                    modifier = Modifier
-                        .align(Alignment.Start)
-                        .alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
-                    shape = RoundedCornerShape(22.dp),
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.92f),
-                        labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    ),
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                if (!isCleanModeActive) {
-                    SectionCard(title = stringResource(R.string.presets)) {
-                        PresetRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            onPresetSelected = { onAction(TimerAction.SetDuration(it)) },
-                            enabled = timer.status != TimerStatus.Running,
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    SectionCard(title = stringResource(R.string.adjust_timer)) {
-                        QuickAdjustRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            onAdjust = onAdjust,
-                            enabled = true,
-                            positiveOnly = timer.status == TimerStatus.Overtime,
-                        )
-                    }
-                } else {
-                    val interactable = minimalUiAlpha > 0.99f
-                    CleanModeQuickAdjust(
-                        controlsExpanded = cleanModeControlsExpanded,
-                        controlsAlpha = minimalUiAlpha,
-                        positiveOnly = timer.status == TimerStatus.Overtime,
-                        onExpand = { if (interactable) onCleanModeExpand() },
-                        onAdjust = { delta -> if (interactable) onCleanModeAdjust(delta) },
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
-            }
-        },
-    ) { _ ->
+        // Top overlay: clock, end-time, status row, name chip
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                // innerPadding is intentionally ignored — the sheet overlaps the timer card from
-                // below so the card always fills the same height and the centered timer text
-                // never shifts position when the sheet shows or hides.
-                // The fixed 164dp bottom padding reserves the sheet-peek area so the timer card
-                // is always sized to the visible region and appears visually centered.
-                .windowInsetsPadding(
-                    WindowInsets.statusBars
-                        .union(WindowInsets.displayCutout)
-                        .union(WindowInsets.navigationBars),
-                )
-                .padding(horizontal = 20.dp)
-                .padding(top = 16.dp, bottom = 164.dp),
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .padding(top = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val clockAlpha = if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f
@@ -835,7 +743,7 @@ private fun PortraitLayout(
 
             val showAnyTopRow = showTopClock || showEndTime || isDragging
             if (showAnyTopRow) Spacer(modifier = Modifier.height(4.dp))
-            else Spacer(modifier = Modifier.height(16.dp))
+            else Spacer(modifier = Modifier.height(8.dp))
 
             StatusAndLogRow(
                 timer = timer,
@@ -853,24 +761,86 @@ private fun PortraitLayout(
                 onNameChipClick = onNameChipClick,
                 onClearPreset = onClearPreset,
             )
+        } // end top overlay Column
 
-            Spacer(modifier = Modifier.height(8.dp))
+        // Bottom overlay: title, presets (idle only), controls, quick adjust
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            TimerTitleDisplay(timer = timer, isCleanModeActive = isCleanModeActive, minimalUiAlpha = minimalUiAlpha)
 
-            HeroTimerCard(
-                timer = timer,
-                displayAlpha = if (isCleanModeActive) minimalUiAlpha else 1f,
-                onDurationSelected = { onAction(TimerAction.SetDuration(it)) },
-                onCenterTap = onOpenDurationPicker,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                isOledMode = appState.isOledMode,
-                onDragActiveChanged = { isDragging = it },
+            CleanModeCanvasAdjustBar(
+                visible = isCleanModeActive,
+                controlsAlpha = minimalUiAlpha,
+                positiveOnly = timer.status == TimerStatus.Overtime,
+                onAdjust = { delta -> if (minimalUiAlpha > 0.99f) onCleanModeAdjust(delta) },
             )
 
-            // Label below the timer card; the bottom sheet slides up and covers it.
-            TimerTitleDisplay(timer = timer, isCleanModeActive = isCleanModeActive, minimalUiAlpha = minimalUiAlpha)
+            if (!isCleanModeActive) {
+                AnimatedVisibility(visible = timer.status == TimerStatus.Idle) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        SectionCard(title = stringResource(R.string.presets)) {
+                            PresetRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                onPresetSelected = { onAction(TimerAction.SetDuration(it)) },
+                                enabled = true,
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+                AnimatedVisibility(visible = timer.status != TimerStatus.Idle) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        SectionCard(title = stringResource(R.string.adjust_timer)) {
+                            QuickAdjustRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                onAdjust = onAdjust,
+                                enabled = true,
+                                positiveOnly = timer.status == TimerStatus.Overtime,
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+            }
+
+            val interactable = !isCleanModeActive || minimalUiAlpha > 0.99f
+            TimerControls(
+                timer = timer,
+                onAction = { action ->
+                    if (!interactable) return@TimerControls
+                    if (action is TimerAction.Start) onStartWithPromptCheck()
+                    else onAction(action)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
+            )
+        } // end bottom overlay Column
+
+        // Gear icon — top-right corner, consistent in both running and non-running modes
+        val settingsInteractable = !isCleanModeActive || minimalUiAlpha > 0.99f
+        Surface(
+            onClick = { if (settingsInteractable) onOpenSettings() },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(36.dp)
+                .alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Text(text = "⚙", style = MaterialTheme.typography.bodyMedium)
+            }
         }
-    }
+    } // end outer Box
 }
+
 
 @Composable
 private fun LandscapeLayout(
@@ -879,7 +849,6 @@ private fun LandscapeLayout(
     isCleanModeActive: Boolean,
     showTopClock: Boolean,
     minimalUiAlpha: Float,
-    cleanModeControlsExpanded: Boolean,
     cleanModeUiAwake: Boolean,
     onAction: (TimerAction) -> Unit,
     onOpenSettings: () -> Unit,
@@ -891,7 +860,6 @@ private fun LandscapeLayout(
     onStartWithPromptCheck: () -> Unit,
     onAdjust: (Long) -> Unit,
     awakenMinimalUi: () -> Unit,
-    onCleanModeExpand: () -> Unit,
     onCleanModeAdjust: (Long) -> Unit,
 ) {
     val settings = timer.settings
@@ -1029,13 +997,14 @@ private fun LandscapeLayout(
                 }
             } else {
                 val interactable = minimalUiAlpha > 0.99f
-                CleanModeQuickAdjust(
-                    controlsExpanded = cleanModeControlsExpanded,
-                    controlsAlpha = minimalUiAlpha,
-                    positiveOnly = timer.status == TimerStatus.Overtime,
-                    onExpand = { if (interactable) onCleanModeExpand() },
-                    onAdjust = { delta -> if (interactable) onCleanModeAdjust(delta) },
-                )
+                SectionCard(modifier = Modifier.alpha(minimalUiAlpha)) {
+                    QuickAdjustRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        onAdjust = { delta -> if (interactable) onCleanModeAdjust(delta) },
+                        enabled = interactable,
+                        positiveOnly = timer.status == TimerStatus.Overtime,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1386,6 +1355,14 @@ private fun SettingsSheetContent(
                 checked = appState.overlayEnabled,
                 onCheckedChange = { onAction(TimerAction.SetOverlayEnabled(it)) },
             )
+            if (appState.overlayEnabled) {
+                Spacer(modifier = Modifier.height(4.dp))
+                PreferenceToggle(
+                    label = stringResource(R.string.overlay_show_on_lockscreen),
+                    checked = appState.overlayShowOnLockscreen,
+                    onCheckedChange = { onAction(TimerAction.SetOverlayShowOnLockscreen(it)) },
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
             OverlaySizeSelector(
                 selectedSize = appState.overlaySize,
@@ -1926,47 +1903,44 @@ private fun DefaultTimerSettingsSection(
 }
 
 @Composable
-private fun CleanModeQuickAdjust(
-    controlsExpanded: Boolean,
+private fun CleanModeCanvasAdjustBar(
+    visible: Boolean,
     controlsAlpha: Float,
     positiveOnly: Boolean,
-    onExpand: () -> Unit,
     onAdjust: (Long) -> Unit,
 ) {
-    Box(
-        modifier = if (controlsExpanded && controlsAlpha > 0f) Modifier.fillMaxWidth()
-                   else Modifier.fillMaxWidth().height(72.dp),
-        contentAlignment = Alignment.Center,
+    if (!visible) return
+    Spacer(modifier = Modifier.height(8.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(controlsAlpha),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (controlsExpanded && controlsAlpha > 0f) {
-            SectionCard(modifier = Modifier.fillMaxWidth()) {
-                QuickAdjustRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    onAdjust = onAdjust,
-                    enabled = true,
-                    positiveOnly = positiveOnly,
-                )
-            }
-        } else {
-            Surface(
-                onClick = onExpand,
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.alpha(controlsAlpha),
-            ) {
-                Box(
-                    modifier = Modifier.size(52.dp).padding(2.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "+",
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.86f),
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-            }
+        if (!positiveOnly) {
+            CanvasAdjustButton(label = "−5 min", modifier = Modifier.weight(1f), onClick = { onAdjust(-5 * 60_000L) })
+            CanvasAdjustButton(label = "−1 min", modifier = Modifier.weight(1f), onClick = { onAdjust(-1 * 60_000L) })
+        }
+        CanvasAdjustButton(label = "+1 min", modifier = Modifier.weight(1f), onClick = { onAdjust(1 * 60_000L) })
+        CanvasAdjustButton(label = "+5 min", modifier = Modifier.weight(1f), onClick = { onAdjust(5 * 60_000L) })
+    }
+}
+
+@Composable
+private fun CanvasAdjustButton(
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(56.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text(text = label, style = MaterialTheme.typography.labelLarge)
         }
     }
 }

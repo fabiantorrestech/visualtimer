@@ -20,6 +20,7 @@ object TimerRepository {
     private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
     private const val KEY_OVERLAY_SIZE = "overlay_size"
     private const val KEY_OVERLAY_STYLE = "overlay_style"
+    private const val KEY_OVERLAY_SHOW_ON_LOCKSCREEN = "overlay_show_on_lockscreen"
 
     // ── Timer count ────────────────────────────────────────────────────────────
     private const val KEY_TIMER_COUNT = "timer_count"
@@ -185,6 +186,7 @@ object TimerRepository {
             overlayEnabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, true),
             overlaySize = overlaySize,
             overlayStyle = overlayStyle,
+            overlayShowOnLockscreen = preferences.getBoolean(KEY_OVERLAY_SHOW_ON_LOCKSCREEN, false),
         )
     }
 
@@ -304,6 +306,7 @@ object TimerRepository {
             .putBoolean(KEY_OVERLAY_ENABLED, state.overlayEnabled)
             .putString(KEY_OVERLAY_SIZE, state.overlaySize.name)
             .putString(KEY_OVERLAY_STYLE, state.overlayStyle.name)
+            .putBoolean(KEY_OVERLAY_SHOW_ON_LOCKSCREEN, state.overlayShowOnLockscreen)
             .putInt(KEY_TIMER_COUNT, state.timers.size)
             .putInt(KEY_ACTIVE_TIMER_INDEX, state.activeTimerIndex)
 

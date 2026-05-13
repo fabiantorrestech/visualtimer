@@ -48,10 +48,17 @@ object TimerOverlayManager {
 
     private var overlayView: OverlayTimerView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
+    private var touchListener: OverlayTouchListener? = null
+    private var touchListenerTimerIndex: Int = -1
     private var imeBottomInset = 0
     private var imeRestorePosition: OverlayPosition? = null
     private var overlayAutoMovedForIme = false
     private var overlayMovedByUserWhileImeVisible = false
+
+    private const val PREFS_NAME = "visual_timer_prefs"
+    private const val KEY_OVERLAY_SNAPPED_LEFT = "overlay_pos_left_edge"
+    private const val KEY_OVERLAY_POS_Y = "overlay_pos_y"
+    private const val OVERLAY_POS_UNSET = -1
 
     fun initialize(context: Context) {
         if (initialized) return
@@ -111,18 +118,30 @@ object TimerOverlayManager {
             onWindowInsetsChanged(insets)
             insets
         }
+        val baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        val lockscreenFlag = if (latestState.overlayShowOnLockscreen)
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED else 0
+        val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val savedY = prefs.getInt(KEY_OVERLAY_POS_Y, OVERLAY_POS_UNSET)
+        val snappedLeft = prefs.getBoolean(KEY_OVERLAY_SNAPPED_LEFT, false)
         val params = WindowManager.LayoutParams(
             sizePx,
             sizePx,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            baseFlags or lockscreenFlag,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             val metrics = appContext.resources.displayMetrics
-            x = metrics.widthPixels - sizePx - dp(24)
-            y = max(dp(32), metrics.heightPixels / 3)
+            val maxX = max(0, metrics.widthPixels - sizePx)
+            if (savedY != OVERLAY_POS_UNSET) {
+                x = if (snappedLeft) 0 else maxX
+                y = savedY.coerceIn(0, max(0, metrics.heightPixels - sizePx))
+            } else {
+                x = maxX - dp(24)
+                y = max(dp(32), metrics.heightPixels / 3)
+            }
         }
 
         windowManager.addView(overlay, params)
@@ -134,12 +153,26 @@ object TimerOverlayManager {
     private fun updateOverlay(timerIndex: Int, timer: TimerInstance) {
         val params = layoutParams ?: return
         val view = overlayView ?: return
-        view.setOnTouchListener(OverlayTouchListener(timerIndex))
+        if (touchListener == null || touchListenerTimerIndex != timerIndex) {
+            touchListener = OverlayTouchListener(timerIndex)
+            touchListenerTimerIndex = timerIndex
+            view.setOnTouchListener(touchListener)
+        }
 
         val sizePx = sizePx(latestState.overlaySize)
         if (params.width != sizePx || params.height != sizePx) {
             params.width = sizePx
             params.height = sizePx
+        }
+
+        val lockscreenEnabled = latestState.overlayShowOnLockscreen
+        val hasLockscreenFlag = (params.flags and WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED) != 0
+        if (hasLockscreenFlag != lockscreenEnabled) {
+            params.flags = if (lockscreenEnabled) {
+                params.flags or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+            } else {
+                params.flags and WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED.inv()
+            }
         }
 
         view.render(
@@ -161,6 +194,8 @@ object TimerOverlayManager {
         }
         overlayView = null
         layoutParams = null
+        touchListener = null
+        touchListenerTimerIndex = -1
         clearImeTracking()
     }
 
@@ -180,6 +215,10 @@ object TimerOverlayManager {
         clampPosition(params)
         applyImeAvoidanceIfNeeded(params)
         updateOverlayLayout(params)
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_OVERLAY_SNAPPED_LEFT, params.x == 0)
+            .putInt(KEY_OVERLAY_POS_Y, params.y)
+            .apply()
     }
 
     private fun onWindowInsetsChanged(insets: WindowInsetsCompat) {
@@ -263,8 +302,8 @@ object TimerOverlayManager {
     ) : View.OnTouchListener {
         private var initialX = 0
         private var initialY = 0
-        private var initialTouchX = 0f
-        private var initialTouchY = 0f
+        private var lastTouchX = 0f
+        private var lastTouchY = 0f
         private var dragStarted = false
 
         override fun onTouch(v: View, event: MotionEvent): Boolean {
@@ -273,19 +312,23 @@ object TimerOverlayManager {
                 MotionEvent.ACTION_DOWN -> {
                     initialX = params.x
                     initialY = params.y
-                    initialTouchX = event.rawX
-                    initialTouchY = event.rawY
+                    lastTouchX = event.rawX
+                    lastTouchY = event.rawY
                     dragStarted = false
                     return true
                 }
 
                 MotionEvent.ACTION_MOVE -> {
-                    val deltaX = event.rawX - initialTouchX
-                    val deltaY = event.rawY - initialTouchY
-                    params.x = initialX + deltaX.toInt()
-                    params.y = initialY + deltaY.toInt()
+                    val dx = event.rawX - lastTouchX
+                    val dy = event.rawY - lastTouchY
+                    params.x += dx.toInt()
+                    params.y += dy.toInt()
+                    lastTouchX = event.rawX
+                    lastTouchY = event.rawY
                     TimerOverlayManager.clampPosition(params)
-                    if (!dragStarted && hasExceededTouchSlop(deltaX, deltaY)) {
+                    val totalDeltaX = params.x - initialX
+                    val totalDeltaY = params.y - initialY
+                    if (!dragStarted && hasExceededTouchSlop(totalDeltaX.toFloat(), totalDeltaY.toFloat())) {
                         dragStarted = true
                         TimerOverlayManager.markOverlayMovedByUserDuringIme()
                     }

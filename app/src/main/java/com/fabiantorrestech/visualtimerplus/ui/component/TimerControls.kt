@@ -103,8 +103,8 @@ private fun RowScope.PrimaryControlButton(
         ),
         modifier = Modifier
             .weight(1f)
-            .height(56.dp)
-            .defaultMinSize(minHeight = 56.dp),
+            .height(68.dp)
+            .defaultMinSize(minHeight = 68.dp),
         content = content,
     )
 }
@@ -128,8 +128,8 @@ private fun RowScope.SecondaryControlButton(
         ),
         modifier = Modifier
             .weight(1f)
-            .height(56.dp)
-            .defaultMinSize(minHeight = 56.dp),
+            .height(68.dp)
+            .defaultMinSize(minHeight = 68.dp),
         content = content,
     )
 }

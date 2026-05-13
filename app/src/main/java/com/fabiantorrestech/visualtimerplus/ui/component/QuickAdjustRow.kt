@@ -1,16 +1,19 @@
 package com.fabiantorrestech.visualtimerplus.ui.component
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -33,9 +36,9 @@ fun QuickAdjustRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                QuickAdjustChip(label = "-30s", enabled = enabled) { onAdjust(-30 * SECOND_MILLIS) }
-                QuickAdjustChip(label = "-1", enabled = enabled) { onAdjust(-1 * MINUTE_MILLIS) }
-                QuickAdjustChip(label = "-5", enabled = enabled) { onAdjust(-5 * MINUTE_MILLIS) }
+                QuickAdjustChip(label = "−30s", enabled = enabled) { onAdjust(-30 * SECOND_MILLIS) }
+                QuickAdjustChip(label = "−1 min", enabled = enabled) { onAdjust(-1 * MINUTE_MILLIS) }
+                QuickAdjustChip(label = "−5 min", enabled = enabled) { onAdjust(-5 * MINUTE_MILLIS) }
             }
         }
         Row(
@@ -43,8 +46,8 @@ fun QuickAdjustRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             QuickAdjustChip(label = "+30s", enabled = enabled) { onAdjust(30 * SECOND_MILLIS) }
-            QuickAdjustChip(label = "+1", enabled = enabled) { onAdjust(1 * MINUTE_MILLIS) }
-            QuickAdjustChip(label = "+5", enabled = enabled) { onAdjust(5 * MINUTE_MILLIS) }
+            QuickAdjustChip(label = "+1 min", enabled = enabled) { onAdjust(1 * MINUTE_MILLIS) }
+            QuickAdjustChip(label = "+5 min", enabled = enabled) { onAdjust(5 * MINUTE_MILLIS) }
         }
     }
 }
@@ -55,15 +58,16 @@ private fun RowScope.QuickAdjustChip(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    AssistChip(
+    Surface(
         onClick = onClick,
         enabled = enabled,
-        label = { Text(text = label) },
-        modifier = Modifier.weight(1f),
+        modifier = Modifier.weight(1f).height(48.dp),
         shape = RoundedCornerShape(22.dp),
-        colors = AssistChipDefaults.assistChipColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
-            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
-    )
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (enabled) 0.92f else 0.45f),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.45f),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text(text = label, style = MaterialTheme.typography.labelLarge)
+        }
+    }
 }

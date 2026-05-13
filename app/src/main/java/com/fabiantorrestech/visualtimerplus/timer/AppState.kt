@@ -22,6 +22,7 @@ data class AppState(
     val overlayEnabled: Boolean = true,
     val overlaySize: OverlaySize = OverlaySize.Medium,
     val overlayStyle: OverlayStyle = OverlayStyle.Ring,
+    val overlayShowOnLockscreen: Boolean = false,
 ) {
     val activeTimer: TimerInstance
         get() = timers.getOrElse(activeTimerIndex) { timers.first() }

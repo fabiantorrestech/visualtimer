@@ -197,5 +197,6 @@
     <string name="overlay_permission_required">Overlay permission required to show the timer over other apps.</string>
     <string name="overlay_permission_granted">Overlay permission granted.</string>
     <string name="overlay_open_settings">Open overlay settings</string>
+    <string name="overlay_show_on_lockscreen">Show over lock screen</string>
     <string name="save_defaults">Save Defaults</string>
 </resources>

@@ -181,6 +181,10 @@ class TimerController(context: Context) {
                 TimerRepository.update { state -> state.copy(overlayStyle = action.style) }
             }
 
+            is TimerAction.SetOverlayShowOnLockscreen -> {
+                TimerRepository.update { state -> state.copy(overlayShowOnLockscreen = action.enabled) }
+            }
+
             // ── Per-timer settings ─────────────────────────────────────────────
             is TimerAction.SetSoundEnabled -> {
                 val idx = resolveIndex(action.timerIndex)
