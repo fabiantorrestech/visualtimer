@@ -85,6 +85,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -670,7 +671,54 @@ private fun PortraitLayout(
 ) {
     val settings = timer.settings
     var isDragging by remember { mutableStateOf(false) }
+    var previewDurationMillis by remember(timer.id) { mutableStateOf<Long?>(null) }
     val minimalControlsInteractable = !isCleanModeActive || minimalUiAlpha > 0.99f
+    val effectiveDisplayMillis = previewDurationMillis ?: timer.displayMillis
+    val effectiveDurationForCommit = previewDurationMillis ?: timer.selectedDurationMillis
+    val resolvedIdleTimer = if (
+        timer.status == TimerStatus.Idle &&
+        effectiveDurationForCommit != timer.selectedDurationMillis
+    ) {
+        timer.copy(
+            selectedDurationMillis = effectiveDurationForCommit,
+            remainingMillis = effectiveDurationForCommit,
+        )
+    } else {
+        timer
+    }
+
+    LaunchedEffect(isDragging, previewDurationMillis, timer.displayMillis) {
+        if (!isDragging && previewDurationMillis != null && previewDurationMillis == timer.displayMillis) {
+            previewDurationMillis = null
+        }
+    }
+
+    fun commitPreviewDuration(durationMillis: Long) {
+        isDragging = false
+        previewDurationMillis = durationMillis
+        if (durationMillis != timer.selectedDurationMillis) {
+            onAction(TimerAction.SetDurationExact(durationMillis))
+        }
+    }
+
+    fun handleIdleCenterTap() {
+        val resolvedDuration = previewDurationMillis ?: timer.selectedDurationMillis
+        if (resolvedDuration != timer.selectedDurationMillis) {
+            onAction(TimerAction.SetDurationExact(resolvedDuration))
+        }
+        if (resolvedDuration == 0L) onOpenDurationPicker() else onStartWithPromptCheck()
+    }
+
+    fun handleTimerControlAction(action: TimerAction) {
+        if (action is TimerAction.Start) {
+            if (effectiveDurationForCommit != timer.selectedDurationMillis) {
+                onAction(TimerAction.SetDurationExact(effectiveDurationForCommit))
+            }
+            if (effectiveDurationForCommit > 0L) onStartWithPromptCheck()
+            return
+        }
+        onAction(action)
+    }
 
     Box(
         modifier = Modifier
@@ -687,11 +735,12 @@ private fun PortraitLayout(
         HeroTimerCard(
             timer = timer,
             displayAlpha = if (isCleanModeActive) minimalUiAlpha else 1f,
-            onDurationSelected = { onAction(TimerAction.SetDuration(it)) },
+            previewDurationMillis = previewDurationMillis,
+            onPreviewDurationChanged = { previewDurationMillis = it },
+            onDragCommit = ::commitPreviewDuration,
             onCenterTap = {
                 when (timer.status) {
-                    TimerStatus.Idle    -> if (timer.selectedDurationMillis == 0L) onOpenDurationPicker()
-                                          else onStartWithPromptCheck()
+                    TimerStatus.Idle    -> handleIdleCenterTap()
                     TimerStatus.Running -> onAction(TimerAction.Pause())
                     TimerStatus.Paused  -> onAction(TimerAction.Resume())
                     else                -> {}
@@ -700,7 +749,9 @@ private fun PortraitLayout(
             onCenterLongPress = onOpenDurationPicker,
             modifier = Modifier.fillMaxWidth().aspectRatio(1f),
             isOledMode = appState.isOledMode,
-            onDragActiveChanged = { isDragging = it },
+            onDragActiveChanged = { dragging ->
+                isDragging = dragging
+            },
         )
 
         // Top overlay: clock, end-time, status row, name chip
@@ -717,7 +768,7 @@ private fun PortraitLayout(
                     Crossfade(targetState = isDragging, label = "portraitDragReadout") { dragging ->
                         if (dragging) {
                             Text(
-                                text = timer.displayMillis.formatClockTime(),
+                                text = effectiveDisplayMillis.formatClockTime(),
                                 style = MaterialTheme.typography.headlineLarge.copy(
                                     fontSize = settings.clockTextSizeSp.sp,
                                     lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
@@ -742,7 +793,7 @@ private fun PortraitLayout(
             } else {
                 AnimatedVisibility(visible = isDragging) {
                     Text(
-                        text = timer.displayMillis.formatClockTime(),
+                        text = effectiveDisplayMillis.formatClockTime(),
                         style = MaterialTheme.typography.headlineLarge.copy(
                             fontSize = settings.clockTextSizeSp.sp,
                             lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
@@ -758,7 +809,7 @@ private fun PortraitLayout(
                 }
             }
 
-            val showEndTime = timer.status != TimerStatus.Finished && timer.displayMillis > 0L &&
+            val showEndTime = timer.status != TimerStatus.Finished && effectiveDisplayMillis > 0L &&
                 (settings.showEndTimeEnabled || timer.status == TimerStatus.Idle)
             AnimatedVisibility(
                 visible = showEndTime,
@@ -770,6 +821,7 @@ private fun PortraitLayout(
                     clockPosition = settings.clockPosition,
                     textSizeSp = settings.endTimeSizeSp,
                     showSeconds = settings.showEndTimeSecondsEnabled,
+                    durationOverrideMillis = if (isDragging) effectiveDurationForCommit else null,
                     modifier = Modifier.alpha(
                         if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f,
                     ),
@@ -850,11 +902,8 @@ private fun PortraitLayout(
             }
 
             TimerControls(
-                timer = timer,
-                onAction = { action ->
-                    if (action is TimerAction.Start) onStartWithPromptCheck()
-                    else onAction(action)
-                },
+                timer = resolvedIdleTimer,
+                onAction = ::handleTimerControlAction,
                 enabled = minimalControlsInteractable,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -913,7 +962,54 @@ private fun LandscapeLayout(
 ) {
     val settings = timer.settings
     var isDragging by remember { mutableStateOf(false) }
+    var previewDurationMillis by remember(timer.id) { mutableStateOf<Long?>(null) }
     val minimalControlsInteractable = !isCleanModeActive || minimalUiAlpha > 0.99f
+    val effectiveDisplayMillis = previewDurationMillis ?: timer.displayMillis
+    val effectiveDurationForCommit = previewDurationMillis ?: timer.selectedDurationMillis
+    val resolvedIdleTimer = if (
+        timer.status == TimerStatus.Idle &&
+        effectiveDurationForCommit != timer.selectedDurationMillis
+    ) {
+        timer.copy(
+            selectedDurationMillis = effectiveDurationForCommit,
+            remainingMillis = effectiveDurationForCommit,
+        )
+    } else {
+        timer
+    }
+
+    LaunchedEffect(isDragging, previewDurationMillis, timer.displayMillis) {
+        if (!isDragging && previewDurationMillis != null && previewDurationMillis == timer.displayMillis) {
+            previewDurationMillis = null
+        }
+    }
+
+    fun commitPreviewDuration(durationMillis: Long) {
+        isDragging = false
+        previewDurationMillis = durationMillis
+        if (durationMillis != timer.selectedDurationMillis) {
+            onAction(TimerAction.SetDurationExact(durationMillis))
+        }
+    }
+
+    fun handleIdleCenterTap() {
+        val resolvedDuration = previewDurationMillis ?: timer.selectedDurationMillis
+        if (resolvedDuration != timer.selectedDurationMillis) {
+            onAction(TimerAction.SetDurationExact(resolvedDuration))
+        }
+        if (resolvedDuration == 0L) onOpenDurationPicker() else onStartWithPromptCheck()
+    }
+
+    fun handleTimerControlAction(action: TimerAction) {
+        if (action is TimerAction.Start) {
+            if (effectiveDurationForCommit != timer.selectedDurationMillis) {
+                onAction(TimerAction.SetDurationExact(effectiveDurationForCommit))
+            }
+            if (effectiveDurationForCommit > 0L) onStartWithPromptCheck()
+            return
+        }
+        onAction(action)
+    }
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -928,11 +1024,12 @@ private fun LandscapeLayout(
             HeroTimerCard(
                 timer = timer,
                 displayAlpha = if (isCleanModeActive) minimalUiAlpha else 1f,
-                onDurationSelected = { onAction(TimerAction.SetDuration(it)) },
+                previewDurationMillis = previewDurationMillis,
+                onPreviewDurationChanged = { previewDurationMillis = it },
+                onDragCommit = ::commitPreviewDuration,
                 onCenterTap = {
                     when (timer.status) {
-                        TimerStatus.Idle    -> if (timer.selectedDurationMillis == 0L) onOpenDurationPicker()
-                                              else onStartWithPromptCheck()
+                        TimerStatus.Idle    -> handleIdleCenterTap()
                         TimerStatus.Running -> onAction(TimerAction.Pause())
                         TimerStatus.Paused  -> onAction(TimerAction.Resume())
                         else                -> {}
@@ -941,7 +1038,9 @@ private fun LandscapeLayout(
                 onCenterLongPress = onOpenDurationPicker,
                 modifier = Modifier.fillMaxSize(),
                 isOledMode = appState.isOledMode,
-                onDragActiveChanged = { isDragging = it },
+                onDragActiveChanged = { dragging ->
+                    isDragging = dragging
+                },
             )
         }
 
@@ -961,7 +1060,7 @@ private fun LandscapeLayout(
                 Crossfade(targetState = isDragging, label = "landscapeDragReadout") { dragging ->
                     if (dragging) {
                         Text(
-                            text = timer.displayMillis.formatClockTime(),
+                            text = effectiveDisplayMillis.formatClockTime(),
                             style = MaterialTheme.typography.headlineLarge.copy(
                                 fontSize = settings.clockTextSizeSp.sp,
                                 lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
@@ -985,7 +1084,7 @@ private fun LandscapeLayout(
             } else {
                 AnimatedVisibility(visible = isDragging) {
                     Text(
-                        text = timer.displayMillis.formatClockTime(),
+                        text = effectiveDisplayMillis.formatClockTime(),
                         style = MaterialTheme.typography.headlineLarge.copy(
                             fontSize = settings.clockTextSizeSp.sp,
                             lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
@@ -1001,7 +1100,7 @@ private fun LandscapeLayout(
                 }
             }
 
-            val showEndTimeLandscape = timer.status != TimerStatus.Finished && timer.displayMillis > 0L &&
+            val showEndTimeLandscape = timer.status != TimerStatus.Finished && effectiveDisplayMillis > 0L &&
                 (settings.showEndTimeEnabled || timer.status == TimerStatus.Idle)
             AnimatedVisibility(
                 visible = showEndTimeLandscape,
@@ -1013,6 +1112,7 @@ private fun LandscapeLayout(
                     clockPosition = settings.clockPosition,
                     textSizeSp = settings.endTimeSizeSp,
                     showSeconds = settings.showEndTimeSecondsEnabled,
+                    durationOverrideMillis = if (isDragging) effectiveDurationForCommit else null,
                     modifier = Modifier.alpha(
                         if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f,
                     ),
@@ -1074,11 +1174,8 @@ private fun LandscapeLayout(
             Spacer(modifier = Modifier.height(8.dp))
             SectionCard(modifier = Modifier.alpha(if (isCleanModeActive) minimalUiAlpha else 1f)) {
                 TimerControls(
-                    timer = timer,
-                    onAction = { action ->
-                        if (action is TimerAction.Start) onStartWithPromptCheck()
-                        else onAction(action)
-                    },
+                    timer = resolvedIdleTimer,
+                    onAction = ::handleTimerControlAction,
                     enabled = minimalControlsInteractable,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1281,13 +1378,16 @@ private fun TimerNameDialog(
 private fun HeroTimerCard(
     timer: TimerInstance,
     displayAlpha: Float,
-    onDurationSelected: (Long) -> Unit,
+    previewDurationMillis: Long?,
+    onPreviewDurationChanged: (Long) -> Unit,
+    onDragCommit: (Long) -> Unit,
     onCenterTap: () -> Unit,
     onCenterLongPress: () -> Unit,
     modifier: Modifier = Modifier,
     isOledMode: Boolean = false,
     onDragActiveChanged: (Boolean) -> Unit = {},
 ) {
+    val effectiveDisplayMillis = previewDurationMillis ?: timer.displayMillis
     // Drive countdown text at wall-clock second boundaries so it ticks in sync with CurrentTimeText.
     var syncedCountdownText by remember { mutableStateOf(timer.displayMillis.formatClockTime()) }
     LaunchedEffect(timer.targetEndTimeMillis, timer.overtimeStartedAtMillis, timer.status) {
@@ -1311,16 +1411,18 @@ private fun HeroTimerCard(
     val countdownText = if (timer.status == TimerStatus.Running || timer.status == TimerStatus.Overtime) {
         syncedCountdownText
     } else {
-        timer.displayMillis.formatClockTime()
+        effectiveDisplayMillis.formatClockTime()
     }
 
     Box(contentAlignment = Alignment.Center, modifier = modifier) {
         VisualTimerCanvas(
             modifier = Modifier.fillMaxSize(),
             timer = timer,
-            onDurationSelected = onDurationSelected,
+            onPreviewDurationChanged = onPreviewDurationChanged,
+            onDragCommit = onDragCommit,
             isOledMode = isOledMode,
             onDragActiveChanged = onDragActiveChanged,
+            displayMillisOverride = previewDurationMillis,
         )
         Box(
             modifier = Modifier
@@ -1340,6 +1442,11 @@ private fun HeroTimerCard(
                     style = MaterialTheme.typography.displaySmall.copy(
                         fontSize = timer.settings.centerTimeSizeSp.sp,
                         lineHeight = (timer.settings.centerTimeSizeSp * 1.2f).sp,
+                        shadow = Shadow(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                            offset = Offset(0f, 3f),
+                            blurRadius = 8f,
+                        ),
                     ),
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
@@ -2544,6 +2651,7 @@ private fun EndTimeText(
     clockPosition: ClockPosition,
     textSizeSp: Float,
     showSeconds: Boolean = false,
+    durationOverrideMillis: Long? = null,
     modifier: Modifier = Modifier,
 ) {
     val formatter = rememberClockFormatter(if (showSeconds) "h:mm:ss a" else "h:mm a")
@@ -2560,8 +2668,8 @@ private fun EndTimeText(
 
     val endMillis = when (timer.status) {
         TimerStatus.Running -> timer.targetEndTimeMillis ?: (now + timer.remainingMillis)
-        TimerStatus.Paused  -> now + (timer.pausedRemainingMillis ?: timer.remainingMillis)
-        TimerStatus.Idle    -> now + timer.selectedDurationMillis
+        TimerStatus.Paused  -> now + (durationOverrideMillis ?: timer.pausedRemainingMillis ?: timer.remainingMillis)
+        TimerStatus.Idle    -> now + (durationOverrideMillis ?: timer.selectedDurationMillis)
         else                -> null
     } ?: return
 

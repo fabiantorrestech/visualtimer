@@ -42,13 +42,15 @@ import kotlin.math.min
 @Composable
 fun VisualTimerCanvas(
     timer: TimerInstance,
-    onDurationSelected: (Long) -> Unit,
+    onPreviewDurationChanged: (Long) -> Unit,
+    onDragCommit: (Long) -> Unit,
     modifier: Modifier = Modifier,
     isOledMode: Boolean = false,
     onDragActiveChanged: (Boolean) -> Unit = {},
+    displayMillisOverride: Long? = null,
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val displayMs = timer.displayMillis
+    val displayMs = displayMillisOverride ?: timer.displayMillis
 
     val isAlarming = timer.status == TimerStatus.Overtime
     val infiniteTransition = rememberInfiniteTransition(label = "blink")
@@ -95,6 +97,9 @@ fun VisualTimerCanvas(
     }
 
     val currentTimer by rememberUpdatedState(timer)
+    val currentDisplayMillis by rememberUpdatedState(displayMillisOverride ?: timer.displayMillis)
+    val previewDurationChanged by rememberUpdatedState(onPreviewDurationChanged)
+    val dragCommit by rememberUpdatedState(onDragCommit)
 
     val startFillAnim = remember { Animatable(-1f) }
     var prevStatus by remember { mutableStateOf(timer.status) }
@@ -158,16 +163,17 @@ fun VisualTimerCanvas(
                 prevAngle = toDirectionalAngle(
                     down.position, size.width.toFloat(), size.height.toFloat(), currentTimer.settings.clockwiseModeEnabled,
                 )
-                totalAngle = currentTimer.displayMillis.toFloat() / ONE_HOUR_MILLIS.toFloat() * 360f
+                totalAngle = currentDisplayMillis.toFloat() / ONE_HOUR_MILLIS.toFloat() * 360f
                 onDragActiveChanged(true)
+                val initialPreviewDuration = snapDuration(
+                    clampDuration(currentDisplayMillis).coerceAtMost(DRAG_MAX_MILLIS),
+                )
+                var latestPreviewDuration = initialPreviewDuration
 
                 // Track drag — same logic as former onDrag.
                 while (true) {
                     val event = awaitPointerEvent()
                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                    if (!change.pressed) break
-                    change.consume()
-
                     val newAngle = toDirectionalAngle(
                         change.position, size.width.toFloat(), size.height.toFloat(), currentTimer.settings.clockwiseModeEnabled,
                     )
@@ -179,8 +185,17 @@ fun VisualTimerCanvas(
                     totalAngle = (totalAngle + delta).coerceIn(0f, 720f)
                     prevAngle = newAngle
                     val rawMs = totalAngle / 360f * ONE_HOUR_MILLIS
-                    onDurationSelected(snapDuration(clampDuration(rawMs.toLong()).coerceAtMost(DRAG_MAX_MILLIS)))
+                    val previewDuration = snapDuration(
+                        clampDuration(rawMs.toLong()).coerceAtMost(DRAG_MAX_MILLIS),
+                    )
+                    if (previewDuration != latestPreviewDuration) {
+                        latestPreviewDuration = previewDuration
+                        previewDurationChanged(previewDuration)
+                    }
+                    if (!change.pressed) break
+                    change.consume()
                 }
+                dragCommit(latestPreviewDuration)
                 onDragActiveChanged(false)
             }
         },
@@ -191,6 +206,8 @@ fun VisualTimerCanvas(
             val radius = diameter / 2f
             val trackColor = if (isOledMode) colorScheme.background else colorScheme.secondaryContainer.copy(alpha = 0.88f)
             val outlineColor = colorScheme.outline.copy(alpha = if (isOledMode) 0.28f else 0.18f)
+            val pivotFillColor = colorScheme.background
+            val pivotOutlineColor = colorScheme.onSurface.copy(alpha = if (isOledMode) 0.34f else 0.18f)
             val arcTopLeft = Offset(center.x - radius, center.y - radius)
             val arcSize = Size(diameter, diameter)
             val sweepSign = if (timer.settings.clockwiseModeEnabled) 1f else -1f
@@ -229,6 +246,17 @@ fun VisualTimerCanvas(
                 radius = radius,
                 center = center,
                 style = Stroke(width = diameter * 0.01f),
+            )
+            drawCircle(
+                color = pivotFillColor,
+                radius = diameter * 0.026f,
+                center = center,
+            )
+            drawCircle(
+                color = pivotOutlineColor,
+                radius = diameter * 0.026f,
+                center = center,
+                style = Stroke(width = diameter * 0.006f),
             )
 
             // Handle dot

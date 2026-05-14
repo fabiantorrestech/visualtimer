@@ -971,7 +971,8 @@ private fun TimerRow(
                 Box(modifier = Modifier.size(48.dp)) {
                     VisualTimerCanvas(
                         timer = timer,
-                        onDurationSelected = {},
+                        onPreviewDurationChanged = {},
+                        onDragCommit = {},
                         modifier = Modifier.fillMaxSize(),
                         isOledMode = isOledMode,
                     )
