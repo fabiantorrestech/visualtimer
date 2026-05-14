@@ -14,4 +14,5 @@ data class TimerLogEntity(
     val cumulativeDurationMillis: Long? = null,
     val timerName: String,
     val presetId: Long? = null,
+    val scheduleId: Long? = null,
 )

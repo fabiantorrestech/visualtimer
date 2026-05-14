@@ -201,6 +201,10 @@ private fun LogEntryCard(index: Int, entry: TimerLogEntity) {
                         Spacer(modifier = Modifier.width(6.dp))
                         AdjustedBadge()
                     }
+                    if (entry.scheduleId != null) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        ScheduledBadge()
+                    }
                 }
                 Text(
                     text = dateFormatter.format(Date(entry.startedAt)),
@@ -259,6 +263,22 @@ private fun AdjustedBadge() {
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onTertiaryContainer,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun ScheduledBadge() {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Text(
+            text = "Scheduled",
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
             fontWeight = FontWeight.SemiBold,
         )
     }

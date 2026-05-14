@@ -42,6 +42,9 @@ interface AppDao {
     @Query("SELECT * FROM presets WHERE name LIKE '%' || :query || '%' ORDER BY name ASC")
     fun searchPresets(query: String): Flow<List<PresetEntity>>
 
+    @Query("SELECT * FROM presets WHERE id = :presetId LIMIT 1")
+    suspend fun getPresetById(presetId: Long): PresetEntity?
+
     @Insert
     suspend fun insertPreset(preset: PresetEntity): Long
 
@@ -90,4 +93,27 @@ interface AppDao {
 
     @Query("DELETE FROM timer_log WHERE id = (SELECT id FROM timer_log ORDER BY startedAt ASC LIMIT 1)")
     suspend fun deleteOldestLogEntry()
+
+    // ── Scheduled timers ──────────────────────────────────────────────────────
+
+    @Query("SELECT * FROM scheduled_timers ORDER BY startTimeMinutes ASC, name ASC")
+    fun observeScheduledTimers(): Flow<List<ScheduledTimerEntity>>
+
+    @Query("SELECT * FROM scheduled_timers ORDER BY startTimeMinutes ASC, name ASC")
+    suspend fun getAllScheduledTimers(): List<ScheduledTimerEntity>
+
+    @Query("SELECT * FROM scheduled_timers WHERE id = :scheduleId LIMIT 1")
+    suspend fun getScheduledTimerById(scheduleId: Long): ScheduledTimerEntity?
+
+    @Insert
+    suspend fun insertScheduledTimer(schedule: ScheduledTimerEntity): Long
+
+    @Update
+    suspend fun updateScheduledTimer(schedule: ScheduledTimerEntity)
+
+    @Delete
+    suspend fun deleteScheduledTimer(schedule: ScheduledTimerEntity)
+
+    @Query("DELETE FROM scheduled_timers WHERE id = :scheduleId")
+    suspend fun deleteScheduledTimerById(scheduleId: Long)
 }

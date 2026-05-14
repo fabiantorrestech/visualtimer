@@ -537,6 +537,7 @@ fun TimerScreen(
             containerColor = MaterialTheme.colorScheme.background,
         ) {
             AllTimersSheet(
+                db = db,
                 appState = appState,
                 onNavigateToTimer = { index ->
                     showAllTimersSheet = false

@@ -16,6 +16,7 @@ data class TimerInstance(
     val defaultDurationMillis: Long = 0L,
     val settings: TimerSettings = TimerSettings(),
     val activeLogEntryId: Long = -1L,
+    val scheduleId: Long? = null,
     val totalAdjustmentMillis: Long = 0L,
     val timeToDismissAccumulatedMillis: Long = 0L,
     val overtimeStartedAtMillis: Long? = null,
@@ -57,4 +58,7 @@ data class TimerInstance(
 
     val isTimerNameAdjusted: Boolean
         get() = activePresetId != null && adjustedDurationMillis != null
+
+    val isScheduledLaunch: Boolean
+        get() = scheduleId != null
 }

@@ -42,6 +42,7 @@ object TimerRepository {
     private const val K_ACTIVE_PRESET_ID = "active_preset_id"
     private const val K_DEFAULT_DURATION = "default_duration"
     private const val K_ACTIVE_LOG_ENTRY_ID = "active_log_entry_id"
+    private const val K_SCHEDULE_ID = "schedule_id"
     private const val K_TOTAL_ADJUSTMENT = "total_adjustment"
     private const val K_TIME_TO_DISMISS_ACCUMULATED = "time_to_dismiss_accumulated"
     private const val K_OVERTIME_STARTED_AT = "overtime_started_at"
@@ -153,7 +154,7 @@ object TimerRepository {
             migrateLegacyState()
         }
 
-        val timerCount = preferences.getInt(KEY_TIMER_COUNT, 1).coerceIn(1, 20)
+        val timerCount = preferences.getInt(KEY_TIMER_COUNT, 1).coerceIn(1, MAX_TIMERS)
         val activeIndex = preferences.getInt(KEY_ACTIVE_TIMER_INDEX, 0).coerceIn(0, timerCount - 1)
 
         val timers = (0 until timerCount).map { i -> loadTimerInstance(i) }
@@ -224,6 +225,7 @@ object TimerRepository {
         val remainingMillis = if (normalizedStatus == TimerStatus.Idle) selectedDuration else recomputedRemaining
 
         val persistedPresetId = preferences.getLong("$p$K_ACTIVE_PRESET_ID", -1L)
+        val persistedScheduleId = preferences.getLong("$p$K_SCHEDULE_ID", -1L)
 
         return TimerInstance(
             id = index,
@@ -238,6 +240,7 @@ object TimerRepository {
             defaultDurationMillis = defaultDuration,
             settings = loadTimerSettings(p),
             activeLogEntryId = preferences.getLong("$p$K_ACTIVE_LOG_ENTRY_ID", -1L),
+            scheduleId = if (persistedScheduleId >= 0L) persistedScheduleId else null,
             totalAdjustmentMillis = preferences.getLong("$p$K_TOTAL_ADJUSTMENT", 0L),
             timeToDismissAccumulatedMillis = preferences.getLong("$p$K_TIME_TO_DISMISS_ACCUMULATED", 0L).coerceAtLeast(0L),
             overtimeStartedAtMillis = if (normalizedStatus == TimerStatus.Overtime) overtimeStartedAt else null,
@@ -337,6 +340,7 @@ object TimerRepository {
             .putLong("$p$K_ACTIVE_PRESET_ID", timer.activePresetId ?: -1L)
             .putLong("$p$K_DEFAULT_DURATION", timer.defaultDurationMillis)
             .putLong("$p$K_ACTIVE_LOG_ENTRY_ID", timer.activeLogEntryId)
+            .putLong("$p$K_SCHEDULE_ID", timer.scheduleId ?: -1L)
             .putLong("$p$K_TOTAL_ADJUSTMENT", timer.totalAdjustmentMillis)
             .putLong("$p$K_TIME_TO_DISMISS_ACCUMULATED", timer.timeToDismissAccumulatedMillis)
 

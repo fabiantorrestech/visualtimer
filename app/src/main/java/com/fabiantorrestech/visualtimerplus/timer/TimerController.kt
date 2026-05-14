@@ -7,6 +7,7 @@ import com.fabiantorrestech.visualtimerplus.db.TimerLogEntity
 import com.fabiantorrestech.visualtimerplus.backup.AutoBackupManager
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
 import com.fabiantorrestech.visualtimerplus.overlay.TimerOverlayManager
+import com.fabiantorrestech.visualtimerplus.schedule.ScheduledTimerManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,6 +27,7 @@ class TimerController(context: Context) {
         if (state.timers.any { it.status == TimerStatus.Running || it.status == TimerStatus.Overtime }) {
             appContext.startForegroundService(Intent(appContext, TimerService::class.java))
         }
+        ScheduledTimerManager.reconcileAllAsync(appContext)
     }
 
     fun dispatch(action: TimerAction) {
@@ -39,7 +41,7 @@ class TimerController(context: Context) {
             // ── Multi-timer management ─────────────────────────────────────────
             TimerAction.AddTimer -> {
                 val current = TimerRepository.getState()
-                if (current.timers.size >= 20) return
+                if (current.timers.size >= MAX_TIMERS) return
                 val newId = current.timers.size
                 val newTimer = TimerInstance(
                     id = newId,
@@ -59,6 +61,7 @@ class TimerController(context: Context) {
                 val idx = action.timerIndex
                 if (idx !in current.timers.indices) return
                 val timer = current.timers[idx]
+                val scheduleId = timer.scheduleId
                 // Stop service for this timer if running
                 if (
                     timer.status == TimerStatus.Running ||
@@ -78,11 +81,13 @@ class TimerController(context: Context) {
                         activeTimerIndex = newActive,
                     )
                 }
+                ScheduledTimerManager.handleTimerLifecycleExitAsync(appContext, scheduleId)
                 syncNotification()
             }
 
             TimerAction.RemoveAllTimers -> {
                 val current = TimerRepository.getState()
+                val removedScheduleIds = current.timers.mapNotNull { it.scheduleId }.distinct()
                 current.timers.forEachIndexed { idx, timer ->
                     if (
                         timer.status == TimerStatus.Running ||
@@ -98,12 +103,16 @@ class TimerController(context: Context) {
                         activeTimerIndex = 0,
                     )
                 }
+                removedScheduleIds.forEach { ScheduledTimerManager.handleTimerLifecycleExitAsync(appContext, it) }
                 syncNotification()
             }
 
             TimerAction.RemoveNonRunningTimers -> {
                 val current = TimerRepository.getState()
-                val running = current.timers.filter { it.status == TimerStatus.Running }
+                val removedScheduleIds = current.timers
+                    .filter { it.status != TimerStatus.Running }
+                    .mapNotNull { it.scheduleId }
+                    .distinct()
                 TimerRepository.update { state ->
                     val kept = state.timers
                         .filter { it.status == TimerStatus.Running }
@@ -113,6 +122,7 @@ class TimerController(context: Context) {
                         activeTimerIndex = 0,
                     )
                 }
+                removedScheduleIds.forEach { ScheduledTimerManager.handleTimerLifecycleExitAsync(appContext, it) }
                 syncNotification()
             }
 
@@ -553,6 +563,7 @@ class TimerController(context: Context) {
                             activeTimerName = "",
                             activePresetId = null,
                             activeLogEntryId = -1L,
+                            scheduleId = null,
                             totalAdjustmentMillis = 0L,
                             timeToDismissAccumulatedMillis = 0L,
                             overtimeStartedAtMillis = null,
@@ -602,6 +613,7 @@ class TimerController(context: Context) {
                     originalDurationMillis = timer.selectedDurationMillis,
                     timerName = timer.activeTimerName.ifBlank { "Default" },
                     presetId = timer.activePresetId,
+                    scheduleId = timer.scheduleId,
                 ),
             )
             TimerRepository.updateTimer(timerIndex) { t -> t.copy(activeLogEntryId = id) }

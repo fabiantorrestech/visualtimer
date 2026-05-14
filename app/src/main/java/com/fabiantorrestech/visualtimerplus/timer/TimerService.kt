@@ -12,8 +12,10 @@ import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.ServiceCompat
 import com.fabiantorrestech.visualtimerplus.db.AppDatabase
+import com.fabiantorrestech.visualtimerplus.db.TimerLogEntity
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
 import com.fabiantorrestech.visualtimerplus.overlay.TimerOverlayManager
+import com.fabiantorrestech.visualtimerplus.schedule.ScheduledTimerManager
 import com.fabiantorrestech.visualtimerplus.util.Haptics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -113,6 +115,7 @@ class TimerService : Service() {
 
         when (intent?.action) {
             ACTION_START -> startTimer(resolvedIndex)
+            ACTION_START_SCHEDULED -> startScheduledTimer(intent)
             ACTION_PAUSE -> pauseTimer(resolvedIndex)
             ACTION_RESUME -> resumeTimer(resolvedIndex)
             ACTION_RESET -> resetTimer(resolvedIndex)
@@ -182,7 +185,7 @@ class TimerService : Service() {
         if (originalDuration <= 0L) return
 
         completeLogEntry(index)
-        createLogEntry(index, originalDuration, timer.activeTimerName, timer.activePresetId)
+        createLogEntry(index, originalDuration, timer.activeTimerName, timer.activePresetId, timer.scheduleId)
 
         val targetEndTime = System.currentTimeMillis() + originalDuration
         TimerRepository.updateTimer(index) { t ->
@@ -248,6 +251,7 @@ class TimerService : Service() {
         completeLogEntry(index)
         val timer = TimerRepository.getTimer(index)
         val wasAlerted = lastAlertedTimerIndex == index
+        val scheduleId = timer.scheduleId
 
         val resetDuration = timer.defaultDurationMillis.takeIf { it > 0L } ?: 0L
         TimerRepository.updateTimer(index) { t ->
@@ -261,6 +265,7 @@ class TimerService : Service() {
                 activeTimerName = "",
                 activePresetId = null,
                 activeLogEntryId = -1L,
+                scheduleId = null,
                 totalAdjustmentMillis = 0L,
                 timeToDismissAccumulatedMillis = 0L,
                 overtimeStartedAtMillis = null,
@@ -271,6 +276,7 @@ class TimerService : Service() {
             stopFinishedAlertEffects()
             lastAlertedTimerIndex = -1
         }
+        ScheduledTimerManager.handleTimerLifecycleExitAsync(applicationContext, scheduleId)
 
         val state = TimerRepository.getState()
         val anyActive = state.timers.any {
@@ -371,20 +377,69 @@ class TimerService : Service() {
         }
     }
 
-    private fun createLogEntry(timerIndex: Int, durationMillis: Long, timerName: String, presetId: Long?) {
+    private fun createLogEntry(
+        timerIndex: Int,
+        durationMillis: Long,
+        timerName: String,
+        presetId: Long?,
+        scheduleId: Long?,
+    ) {
         serviceScope.launch {
             val count = db.appDao().getLogCount()
             if (count >= 100) db.appDao().deleteOldestLogEntry()
             val id = db.appDao().insertLogEntry(
-                com.fabiantorrestech.visualtimerplus.db.TimerLogEntity(
+                TimerLogEntity(
                     startedAt = System.currentTimeMillis(),
                     originalDurationMillis = durationMillis,
                     timerName = timerName.ifBlank { "Default" },
                     presetId = presetId,
+                    scheduleId = scheduleId,
                 ),
             )
             TimerRepository.updateTimer(timerIndex) { t -> t.copy(activeLogEntryId = id) }
         }
+    }
+
+    private fun startScheduledTimer(intent: Intent) {
+        val durationMillis = intent.getLongExtra(ScheduledTimerManager.EXTRA_SCHEDULED_DURATION_MILLIS, 0L)
+        val presetId = intent.getLongExtra(ScheduledTimerManager.EXTRA_SCHEDULED_PRESET_ID, -1L)
+        val scheduleId = intent.getLongExtra(ScheduledTimerManager.EXTRA_SCHEDULE_ID, -1L)
+        val timerName = intent.getStringExtra(ScheduledTimerManager.EXTRA_SCHEDULED_TIMER_NAME).orEmpty()
+        val state = TimerRepository.getState()
+        if (durationMillis <= 0L || !ScheduledTimerManager.hasLaunchCapacity(state)) return
+
+        val targetIndex = state.timers.indexOfFirst { it.status == TimerStatus.Idle }.takeIf { it >= 0 } ?: state.timers.size
+        val newTimer = TimerInstance(
+            id = targetIndex,
+            status = TimerStatus.Idle,
+            selectedDurationMillis = durationMillis,
+            remainingMillis = durationMillis,
+            originalDurationMillis = durationMillis,
+            activeTimerName = timerName,
+            activePresetId = presetId.takeIf { it >= 0L },
+            defaultDurationMillis = state.defaultDurationMillis,
+            settings = state.defaultTimerSettings,
+            scheduleId = scheduleId.takeIf { it >= 0L },
+        )
+        TimerRepository.update { current ->
+            if (!ScheduledTimerManager.hasLaunchCapacity(current)) {
+                current
+            } else if (targetIndex < current.timers.size) {
+                val updated = current.timers.toMutableList()
+                updated[targetIndex] = newTimer
+                current.copy(timers = updated)
+            } else {
+                current.copy(timers = current.timers + newTimer)
+            }
+        }
+        createLogEntry(
+            timerIndex = targetIndex,
+            durationMillis = durationMillis,
+            timerName = timerName,
+            presetId = newTimer.activePresetId,
+            scheduleId = newTimer.scheduleId,
+        )
+        startTimer(targetIndex)
     }
 
     private fun promoteToForeground() {
@@ -472,6 +527,7 @@ class TimerService : Service() {
 
     companion object {
         const val ACTION_START = "com.fabiantorrestech.visualtimerplus.action.START"
+        const val ACTION_START_SCHEDULED = "com.fabiantorrestech.visualtimerplus.action.START_SCHEDULED"
         const val ACTION_PAUSE = "com.fabiantorrestech.visualtimerplus.action.PAUSE"
         const val ACTION_RESUME = "com.fabiantorrestech.visualtimerplus.action.RESUME"
         const val ACTION_RESET = "com.fabiantorrestech.visualtimerplus.action.RESET"

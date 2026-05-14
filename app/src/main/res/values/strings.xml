@@ -93,6 +93,7 @@
     <string name="picker_invalid">Invalid time</string>
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
+    <string name="delete">Delete</string>
     <string name="tab_duration">Duration</string>
     <string name="tab_end_time">End time</string>
     <string name="set_end_time">Set end time</string>
@@ -165,6 +166,7 @@
     <string name="delete_all_confirm_title">Are you sure?</string>
     <string name="delete_all_confirm_body">This will delete any currently running timers as well!</string>
     <string name="delete_all_confirm_yes">Yes, I\'m sure!</string>
+    <string name="delete_all_timers_confirm">This will delete every timer, including running ones.</string>
 
     <!-- Multi-timer -->
     <string name="add_timer">New Timer</string>
@@ -175,6 +177,7 @@
     <string name="default_timer_settings_title">Default settings for new timers</string>
     <string name="current_timer_settings">Current Timer Settings</string>
     <string name="confirm_swipe_delete">Confirm before deleting (swipe)</string>
+    <string name="search_timers">Search timers</string>
     <string name="tap_to_toggle_minimal_mode">Tap blank space to toggle minimal controls</string>
     <string name="yes">Yes</string>
     <string name="timer_delete_title">Delete \"%1$s\"?</string>
