@@ -215,6 +215,12 @@ class TimerController(context: Context) {
                 TimerRepository.update { state -> state.copy(autoBackupEnabled = action.enabled) }
             }
 
+            is TimerAction.SetCustomFont -> {
+                TimerRepository.update { state ->
+                    state.copy(customFontPath = action.path, customFontDisplayName = action.displayName)
+                }
+            }
+
             // ── Per-timer settings ─────────────────────────────────────────────
             is TimerAction.SetSoundEnabled -> {
                 val idx = resolveIndex(action.timerIndex)
@@ -298,6 +304,12 @@ class TimerController(context: Context) {
             is TimerAction.SetClockwiseModeEnabled -> {
                 val idx = resolveIndex(action.timerIndex)
                 TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(clockwiseModeEnabled = action.enabled)) }
+                AutoBackupManager.scheduleBackup(appContext)
+            }
+
+            is TimerAction.SetShowDirectionIndicator -> {
+                val idx = resolveIndex(action.timerIndex)
+                TimerRepository.updateTimer(idx) { t -> t.copy(settings = t.settings.copy(showDirectionIndicator = action.enabled)) }
                 AutoBackupManager.scheduleBackup(appContext)
             }
 

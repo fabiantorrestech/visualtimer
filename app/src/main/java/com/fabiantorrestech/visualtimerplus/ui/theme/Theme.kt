@@ -6,7 +6,10 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import java.io.File
 
 private val LightColors = lightColorScheme(
     primary = TimerRed,
@@ -70,6 +73,7 @@ private val AppShapes = Shapes(
 fun VisualTimerPlusTheme(
     isDark: Boolean,
     oledBlackEnabled: Boolean,
+    customFontPath: String? = null,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {
@@ -78,9 +82,22 @@ fun VisualTimerPlusTheme(
         else -> LightColors
     }
 
+    val typography = remember(customFontPath) {
+        if (customFontPath != null && File(customFontPath).exists()) {
+            try {
+                val typeface = android.graphics.Typeface.createFromFile(customFontPath)
+                typographyWithFont(FontFamily(typeface))
+            } catch (_: Exception) {
+                AppTypography
+            }
+        } else {
+            AppTypography
+        }
+    }
+
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = AppTypography,
+        typography = typography,
         shapes = AppShapes,
         content = content,
     )

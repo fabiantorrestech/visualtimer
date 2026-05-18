@@ -13,6 +13,7 @@ data class TimerSettings(
     val clockPosition: ClockPosition = ClockPosition.Left,
     val clockTextSizeSp: Float = 32f,
     val clockwiseModeEnabled: Boolean = true,
+    val showDirectionIndicator: Boolean = true,
     val cleanModeEnabled: Boolean = false,
     val cleanModeAutoDismissEnabled: Boolean = true,
     val cleanModeAutoDismissSeconds: Int = CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS,

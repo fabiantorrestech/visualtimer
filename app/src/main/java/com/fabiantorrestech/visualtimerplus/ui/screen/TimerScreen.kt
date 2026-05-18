@@ -3,6 +3,8 @@ package com.fabiantorrestech.visualtimerplus.ui.screen
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
+import android.provider.OpenableColumns
+import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -1547,6 +1549,25 @@ private fun SettingsSheetContent(
         }
     }
 
+    val fontPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        backupScope.launch(Dispatchers.IO) {
+            val displayName = context.contentResolver.query(uri, null, null, null, null)
+                ?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0) cursor.getString(idx) else null
+                    } else null
+                }
+            val destDir = File(context.filesDir, "fonts").also { it.mkdirs() }
+            val destFile = File(destDir, "custom_font")
+            context.contentResolver.openInputStream(uri)?.use { it.copyTo(destFile.outputStream()) }
+            onAction(TimerAction.SetCustomFont(destFile.absolutePath, displayName))
+        }
+    }
+
     pendingImportJson?.let { json ->
         AlertDialog(
             onDismissRequest = { pendingImportJson = null },
@@ -1601,6 +1622,35 @@ private fun SettingsSheetContent(
                     label = stringResource(R.string.oled_black),
                     checked = appState.isOledMode,
                     onCheckedChange = { onAction(TimerAction.SetOledMode(it)) },
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Column {
+                Text(
+                    text = stringResource(R.string.custom_font),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = appState.customFontDisplayName ?: stringResource(R.string.custom_font_none),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { fontPickerLauncher.launch(arrayOf("*/*")) }) {
+                        Text(stringResource(R.string.custom_font_select))
+                    }
+                    if (appState.customFontPath != null) {
+                        OutlinedButton(onClick = { onAction(TimerAction.SetCustomFont(null, null)) }) {
+                            Text(stringResource(R.string.custom_font_reset))
+                        }
+                    }
+                }
+                Text(
+                    text = stringResource(R.string.custom_font_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
@@ -1815,6 +1865,12 @@ private fun SettingsSheetContent(
                 label = stringResource(R.string.clockwise_mode),
                 checked = settings.clockwiseModeEnabled,
                 onCheckedChange = { onAction(TimerAction.SetClockwiseModeEnabled(it)) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.show_direction_indicator),
+                checked = settings.showDirectionIndicator,
+                onCheckedChange = { onAction(TimerAction.SetShowDirectionIndicator(it)) },
             )
             Spacer(modifier = Modifier.height(12.dp))
             PreferenceToggle(
@@ -2175,6 +2231,12 @@ private fun DefaultTimerSettingsSection(
             label = stringResource(R.string.clockwise_mode),
             checked = draft.clockwiseModeEnabled,
             onCheckedChange = { draft = draft.copy(clockwiseModeEnabled = it) },
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        PreferenceToggle(
+            label = stringResource(R.string.show_direction_indicator),
+            checked = draft.showDirectionIndicator,
+            onCheckedChange = { draft = draft.copy(showDirectionIndicator = it) },
         )
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(

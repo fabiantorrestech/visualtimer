@@ -24,6 +24,7 @@ sealed interface TimerAction {
     data class SetClockPosition(val position: ClockPosition, val timerIndex: Int = -1) : TimerAction
     data class SetClockTextSizeSp(val sp: Float, val timerIndex: Int = -1) : TimerAction
     data class SetClockwiseModeEnabled(val enabled: Boolean, val timerIndex: Int = -1) : TimerAction
+    data class SetShowDirectionIndicator(val enabled: Boolean, val timerIndex: Int = -1) : TimerAction
     data class SetCleanModeEnabled(val enabled: Boolean, val timerIndex: Int = -1) : TimerAction
     data class SetCleanModeAutoDismissEnabled(val enabled: Boolean, val timerIndex: Int = -1) : TimerAction
     data class SetCleanModeAutoDismissSeconds(val seconds: Int, val timerIndex: Int = -1) : TimerAction
@@ -62,6 +63,7 @@ sealed interface TimerAction {
     data class SetOverlayStyle(val style: OverlayStyle) : TimerAction
     data class SetOverlayShowOnLockscreen(val enabled: Boolean) : TimerAction
     data class SetAutoBackupEnabled(val enabled: Boolean) : TimerAction
+    data class SetCustomFont(val path: String?, val displayName: String?) : TimerAction
 
     // Multi-timer management
     data object AddTimer : TimerAction
@@ -92,6 +94,7 @@ fun TimerAction.withTimerIndex(index: Int): TimerAction = when (this) {
     is TimerAction.SetClockPosition -> copy(timerIndex = index)
     is TimerAction.SetClockTextSizeSp -> copy(timerIndex = index)
     is TimerAction.SetClockwiseModeEnabled -> copy(timerIndex = index)
+    is TimerAction.SetShowDirectionIndicator -> copy(timerIndex = index)
     is TimerAction.SetCleanModeEnabled -> copy(timerIndex = index)
     is TimerAction.SetCleanModeAutoDismissEnabled -> copy(timerIndex = index)
     is TimerAction.SetCleanModeAutoDismissSeconds -> copy(timerIndex = index)

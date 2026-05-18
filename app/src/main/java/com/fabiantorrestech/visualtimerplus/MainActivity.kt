@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.Dark -> true
                 ThemeMode.System -> systemDark
             }
-            VisualTimerPlusTheme(isDark = isDark, oledBlackEnabled = uiState.isOledMode) {
+            VisualTimerPlusTheme(isDark = isDark, oledBlackEnabled = uiState.isOledMode, customFontPath = uiState.customFontPath) {
                 AnimatedContent(targetState = currentScreen, label = "screen") { screen ->
                     when (screen) {
                         AppScreen.Timer -> TimerScreen(

@@ -2,6 +2,7 @@ package com.fabiantorrestech.visualtimerplus.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
@@ -62,4 +63,19 @@ val AppTypography = Typography(
         lineHeight = 20.sp,
         letterSpacing = 0.1.sp,
     ),
+)
+
+fun typographyWithFont(fontFamily: FontFamily): Typography = Typography(
+    displayLarge  = AppTypography.displayLarge.copy(fontFamily = fontFamily),
+    displayMedium = AppTypography.displayMedium.copy(fontFamily = fontFamily),
+    displaySmall  = AppTypography.displaySmall.copy(fontFamily = fontFamily),
+    headlineLarge = AppTypography.headlineLarge.copy(fontFamily = fontFamily),
+    headlineMedium = AppTypography.headlineMedium.copy(fontFamily = fontFamily),
+    titleLarge    = AppTypography.titleLarge.copy(fontFamily = fontFamily),
+    titleMedium   = AppTypography.titleMedium.copy(fontFamily = fontFamily),
+    bodyLarge     = AppTypography.bodyLarge.copy(fontFamily = fontFamily),
+    bodyMedium    = AppTypography.bodyMedium.copy(fontFamily = fontFamily),
+    labelLarge    = AppTypography.labelLarge.copy(fontFamily = fontFamily),
+    labelMedium   = AppTypography.labelMedium.copy(fontFamily = fontFamily),
+    labelSmall    = AppTypography.labelSmall.copy(fontFamily = fontFamily),
 )

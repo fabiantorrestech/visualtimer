@@ -22,6 +22,8 @@ object TimerRepository {
     private const val KEY_OVERLAY_STYLE = "overlay_style"
     private const val KEY_OVERLAY_SHOW_ON_LOCKSCREEN = "overlay_show_on_lockscreen"
     private const val KEY_AUTO_BACKUP_ENABLED = "auto_backup_enabled"
+    private const val KEY_CUSTOM_FONT_PATH = "custom_font_path"
+    private const val KEY_CUSTOM_FONT_DISPLAY_NAME = "custom_font_display_name"
 
     // ── Timer count ────────────────────────────────────────────────────────────
     private const val KEY_TIMER_COUNT = "timer_count"
@@ -59,6 +61,7 @@ object TimerRepository {
     private const val K_CLOCK_POSITION = "clock_position"
     private const val K_CLOCK_TEXT_SIZE_SP = "clock_text_size_sp"
     private const val K_CLOCKWISE_MODE = "clockwise_mode_enabled"
+    private const val K_SHOW_DIRECTION_INDICATOR = "show_direction_indicator"
     private const val K_CLEAN_MODE = "clean_mode_enabled"
     private const val K_CLEAN_MODE_AUTO_DISMISS = "clean_mode_auto_dismiss_seconds"
     private const val K_CLEAN_MODE_AUTO_DISMISS_ENABLED = "clean_mode_auto_dismiss_enabled"
@@ -190,6 +193,8 @@ object TimerRepository {
             overlayStyle = overlayStyle,
             overlayShowOnLockscreen = preferences.getBoolean(KEY_OVERLAY_SHOW_ON_LOCKSCREEN, false),
             autoBackupEnabled = preferences.getBoolean(KEY_AUTO_BACKUP_ENABLED, false),
+            customFontPath = preferences.getString(KEY_CUSTOM_FONT_PATH, null),
+            customFontDisplayName = preferences.getString(KEY_CUSTOM_FONT_DISPLAY_NAME, null),
         )
     }
 
@@ -294,6 +299,7 @@ object TimerRepository {
             showEndTimeEnabled = preferences.getBoolean("$prefix$K_SHOW_END_TIME", false),
             showEndTimeSecondsEnabled = preferences.getBoolean("$prefix$K_SHOW_END_TIME_SECONDS", false),
             endTimeSizeSp = preferences.getFloat("$prefix$K_END_TIME_SIZE_SP", 32f).coerceIn(14f, 60f),
+            showDirectionIndicator = preferences.getBoolean("$prefix$K_SHOW_DIRECTION_INDICATOR", true),
         )
     }
 
@@ -317,6 +323,8 @@ object TimerRepository {
             .putString(KEY_OVERLAY_STYLE, state.overlayStyle.name)
             .putBoolean(KEY_OVERLAY_SHOW_ON_LOCKSCREEN, state.overlayShowOnLockscreen)
             .putBoolean(KEY_AUTO_BACKUP_ENABLED, state.autoBackupEnabled)
+            .putString(KEY_CUSTOM_FONT_PATH, state.customFontPath)
+            .putString(KEY_CUSTOM_FONT_DISPLAY_NAME, state.customFontDisplayName)
             .putInt(KEY_TIMER_COUNT, state.timers.size)
             .putInt(KEY_ACTIVE_TIMER_INDEX, state.activeTimerIndex)
 
@@ -391,6 +399,7 @@ object TimerRepository {
             .putBoolean("$prefix$K_SHOW_END_TIME", settings.showEndTimeEnabled)
             .putBoolean("$prefix$K_SHOW_END_TIME_SECONDS", settings.showEndTimeSecondsEnabled)
             .putFloat("$prefix$K_END_TIME_SIZE_SP", settings.endTimeSizeSp)
+            .putBoolean("$prefix$K_SHOW_DIRECTION_INDICATOR", settings.showDirectionIndicator)
     }
 
     // ── Migration from legacy single-timer flat keys ───────────────────────────

@@ -24,7 +24,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Paint as ComposePaint
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -36,8 +40,11 @@ import com.fabiantorrestech.visualtimerplus.timer.clampDuration
 import com.fabiantorrestech.visualtimerplus.timer.snapDuration
 import com.fabiantorrestech.visualtimerplus.ui.theme.TimerRed
 import com.fabiantorrestech.visualtimerplus.ui.theme.TimerRedDark
+import kotlin.math.PI
 import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.sin
 
 @Composable
 fun VisualTimerCanvas(
@@ -247,6 +254,73 @@ fun VisualTimerCanvas(
                 center = center,
                 style = Stroke(width = diameter * 0.01f),
             )
+
+            // 12 o'clock divider line: always visible, anchors the start position visually.
+            drawLine(
+                color = colorScheme.outline.copy(alpha = if (isOledMode) 0.40f else 0.30f),
+                start = Offset(center.x, center.y - radius),
+                end = Offset(center.x, center.y - diameter * 0.026f),
+                strokeWidth = diameter * 0.008f,
+                cap = StrokeCap.Round,
+            )
+
+            // Direction indicator: curved arrow from 12 o'clock sweeping 90° toward 3 (CW) or 9 (CCW).
+            // Only shown when the user can interact (idle/paused) and the setting is on.
+            val showIndicator = timer.settings.showDirectionIndicator &&
+                (timer.status == TimerStatus.Idle || timer.status == TimerStatus.Paused)
+            if (showIndicator) {
+                val indicatorRadius = radius * 0.82f
+                val indicatorStroke = diameter * 0.024f
+                val headSize = diameter * 0.040f
+
+                val arcStartAngle = -90f           // always starts at 12 o'clock
+                val arcSweepAngle = sweepSign * 90f // CW → 3 o'clock, CCW → 9 o'clock
+
+                val endAngleRad = Math.toRadians((arcStartAngle + arcSweepAngle).toDouble()).toFloat()
+                val tipX = center.x + indicatorRadius * cos(endAngleRad)
+                val tipY = center.y + indicatorRadius * sin(endAngleRad)
+                val tangentRad = endAngleRad + (if (sweepSign > 0f) (PI / 2).toFloat() else (-PI / 2).toFloat())
+
+                val arrowPath = Path()
+                arrowPath.moveTo(
+                    tipX + headSize * cos(tangentRad),
+                    tipY + headSize * sin(tangentRad),
+                )
+                arrowPath.lineTo(
+                    tipX + headSize * 0.55f * cos(tangentRad + 2.2f),
+                    tipY + headSize * 0.55f * sin(tangentRad + 2.2f),
+                )
+                arrowPath.lineTo(
+                    tipX + headSize * 0.55f * cos(tangentRad - 2.2f),
+                    tipY + headSize * 0.55f * sin(tangentRad - 2.2f),
+                )
+                arrowPath.close()
+
+                // saveLayer composites arc + arrowhead at a single alpha so their
+                // overlapping pixels don't double-stack opacity.
+                val indicatorPaint = ComposePaint().apply { alpha = 0.72f }
+                drawContext.canvas.saveLayer(
+                    Rect(
+                        center.x - indicatorRadius - headSize,
+                        center.y - indicatorRadius - headSize,
+                        center.x + indicatorRadius + headSize,
+                        center.y + indicatorRadius + headSize,
+                    ),
+                    indicatorPaint,
+                )
+                drawArc(
+                    color = colorScheme.onSurface,
+                    startAngle = arcStartAngle,
+                    sweepAngle = arcSweepAngle,
+                    useCenter = false,
+                    topLeft = Offset(center.x - indicatorRadius, center.y - indicatorRadius),
+                    size = Size(indicatorRadius * 2f, indicatorRadius * 2f),
+                    style = Stroke(width = indicatorStroke, cap = StrokeCap.Round),
+                )
+                drawPath(arrowPath, color = colorScheme.onSurface)
+                drawContext.canvas.restore()
+            }
+
             drawCircle(
                 color = pivotFillColor,
                 radius = diameter * 0.026f,

@@ -22,6 +22,11 @@
     <string name="theme_dark">Dark</string>
     <string name="theme_system">System</string>
     <string name="oled_black">OLED black</string>
+    <string name="custom_font">Custom font</string>
+    <string name="custom_font_hint">TTF, OTF, TTC and other common formats</string>
+    <string name="custom_font_none">Default system font</string>
+    <string name="custom_font_select">Choose font file</string>
+    <string name="custom_font_reset">Reset to default</string>
     <string name="presets">Presets</string>
     <string name="sound">Sound</string>
     <string name="vibrate">Vibrate</string>
@@ -54,6 +59,7 @@
     <string name="clock_size_medium">Medium</string>
     <string name="clock_size_large">Large</string>
     <string name="clockwise_mode">Clockwise mode</string>
+    <string name="show_direction_indicator">Show direction indicator</string>
     <string name="full_clock_mode">Full clock mode (start from full circle)</string>
     <string name="clean_mode">Minimal mode</string>
     <string name="clean_mode_auto_dismiss_enabled">Autodismiss UI</string>
