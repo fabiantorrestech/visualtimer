@@ -63,6 +63,7 @@ sealed interface TimerAction {
     data class SetOverlayStyle(val style: OverlayStyle) : TimerAction
     data class SetOverlayShowOnLockscreen(val enabled: Boolean) : TimerAction
     data class SetAutoBackupEnabled(val enabled: Boolean) : TimerAction
+    data class SetAutoOpenAppAfterQuickStart(val enabled: Boolean) : TimerAction
     data class SetCustomFont(val path: String?, val displayName: String?) : TimerAction
 
     // Multi-timer management

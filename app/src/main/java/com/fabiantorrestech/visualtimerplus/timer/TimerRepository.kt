@@ -22,6 +22,7 @@ object TimerRepository {
     private const val KEY_OVERLAY_STYLE = "overlay_style"
     private const val KEY_OVERLAY_SHOW_ON_LOCKSCREEN = "overlay_show_on_lockscreen"
     private const val KEY_AUTO_BACKUP_ENABLED = "auto_backup_enabled"
+    private const val KEY_AUTO_OPEN_APP_AFTER_QUICK_START = "auto_open_app_after_quick_start"
     private const val KEY_CUSTOM_FONT_PATH = "custom_font_path"
     private const val KEY_CUSTOM_FONT_DISPLAY_NAME = "custom_font_display_name"
 
@@ -193,6 +194,7 @@ object TimerRepository {
             overlayStyle = overlayStyle,
             overlayShowOnLockscreen = preferences.getBoolean(KEY_OVERLAY_SHOW_ON_LOCKSCREEN, false),
             autoBackupEnabled = preferences.getBoolean(KEY_AUTO_BACKUP_ENABLED, false),
+            autoOpenAppAfterQuickStart = preferences.getBoolean(KEY_AUTO_OPEN_APP_AFTER_QUICK_START, true),
             customFontPath = preferences.getString(KEY_CUSTOM_FONT_PATH, null),
             customFontDisplayName = preferences.getString(KEY_CUSTOM_FONT_DISPLAY_NAME, null),
         )
@@ -323,6 +325,7 @@ object TimerRepository {
             .putString(KEY_OVERLAY_STYLE, state.overlayStyle.name)
             .putBoolean(KEY_OVERLAY_SHOW_ON_LOCKSCREEN, state.overlayShowOnLockscreen)
             .putBoolean(KEY_AUTO_BACKUP_ENABLED, state.autoBackupEnabled)
+            .putBoolean(KEY_AUTO_OPEN_APP_AFTER_QUICK_START, state.autoOpenAppAfterQuickStart)
             .putString(KEY_CUSTOM_FONT_PATH, state.customFontPath)
             .putString(KEY_CUSTOM_FONT_DISPLAY_NAME, state.customFontDisplayName)
             .putInt(KEY_TIMER_COUNT, state.timers.size)

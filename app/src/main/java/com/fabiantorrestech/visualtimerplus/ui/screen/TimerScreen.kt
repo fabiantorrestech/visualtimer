@@ -1751,6 +1751,12 @@ private fun SettingsSheetContent(
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(12.dp))
+                PreferenceToggle(
+                    label = stringResource(R.string.automation_auto_open_after_quick_start),
+                    checked = appState.autoOpenAppAfterQuickStart,
+                    onCheckedChange = { onAction(TimerAction.SetAutoOpenAppAfterQuickStart(it)) },
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))

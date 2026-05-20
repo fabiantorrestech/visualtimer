@@ -215,6 +215,11 @@ class TimerController(context: Context) {
                 TimerRepository.update { state -> state.copy(autoBackupEnabled = action.enabled) }
             }
 
+            is TimerAction.SetAutoOpenAppAfterQuickStart -> {
+                TimerRepository.update { state -> state.copy(autoOpenAppAfterQuickStart = action.enabled) }
+                AutoBackupManager.scheduleBackup(appContext)
+            }
+
             is TimerAction.SetCustomFont -> {
                 TimerRepository.update { state ->
                     state.copy(customFontPath = action.path, customFontDisplayName = action.displayName)

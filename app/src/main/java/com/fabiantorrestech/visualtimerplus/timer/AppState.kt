@@ -24,6 +24,7 @@ data class AppState(
     val overlayStyle: OverlayStyle = OverlayStyle.Ring,
     val overlayShowOnLockscreen: Boolean = false,
     val autoBackupEnabled: Boolean = false,
+    val autoOpenAppAfterQuickStart: Boolean = true,
     val customFontPath: String? = null,
     val customFontDisplayName: String? = null,
 ) {

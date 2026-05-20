@@ -234,6 +234,7 @@
     <string name="quick_timer_start">Start Timer</string>
     <string name="quick_timer_max_reached">Maximum timers reached (%1$d)</string>
     <string name="quick_timer_no_presets">No presets saved yet</string>
+    <string name="quick_timer_open_app">Open app</string>
     <string name="quick_start_notification_title">Timer started</string>
     <string name="quick_start_notification_channel_name">Quick timer started</string>
 
@@ -259,6 +260,7 @@
     <string name="automation_title">Shortcuts &amp; Automation</string>
     <string name="automation_dialog_title">Automation &amp; Shortcuts</string>
     <string name="automation_dialog_close">Close</string>
+    <string name="automation_auto_open_after_quick_start">Automatically go into app after starting a timer</string>
     <string name="automation_section_quick_timer">Open Quick Timer popup</string>
     <string name="automation_section_control">Control timers (Service Intent)</string>
     <string name="automation_section_macrodroid">MacroDroid</string>
