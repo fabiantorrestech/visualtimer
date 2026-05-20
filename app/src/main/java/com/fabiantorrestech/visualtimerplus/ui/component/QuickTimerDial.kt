@@ -36,11 +36,14 @@ fun QuickTimerDial(
     modifier: Modifier = Modifier,
     showLabel: Boolean = true,
     clockwiseModeEnabled: Boolean = true,
+    isOledMode: Boolean = false,
 ) {
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val trackColor = MaterialTheme.colorScheme.surfaceVariant
-    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
-    val cueColor = MaterialTheme.colorScheme.outline
+    val colorScheme = MaterialTheme.colorScheme
+    val primaryColor = colorScheme.primary
+    val trackColor = if (isOledMode) colorScheme.outline.copy(alpha = 0.20f) else colorScheme.surfaceVariant
+    val onSurfaceColor = colorScheme.onSurface
+    val cueColor = colorScheme.outline
+    val dividerColor = colorScheme.outline.copy(alpha = if (isOledMode) 0.55f else 0.45f)
 
     var totalAngle by remember { mutableFloatStateOf(0f) }
 
@@ -163,6 +166,16 @@ fun QuickTimerDial(
                 )
             }
 
+            // Outer ring 12 o'clock divider — drawn after the red arc so it renders on top
+            val arcRadius = size.minDimension / 2f - strokeWidth
+            drawLine(
+                color = dividerColor,
+                start = Offset(center.x, center.y - arcRadius - strokeWidth / 2f),
+                end = Offset(center.x, center.y - arcRadius + strokeWidth / 2f),
+                strokeWidth = size.minDimension * 0.012f,
+                cap = StrokeCap.Round,
+            )
+
             // Second hour: inner ring
             if (totalAngle >= 360f) {
                 val innerStroke = strokeWidth * 0.55f
@@ -191,6 +204,16 @@ fun QuickTimerDial(
                         style = Stroke(width = innerStroke, cap = StrokeCap.Round),
                     )
                 }
+
+                // Inner ring 12 o'clock divider
+                val innerArcRadius = size.minDimension / 2f - innerPad
+                drawLine(
+                    color = dividerColor,
+                    start = Offset(center.x, center.y - innerArcRadius - innerStroke / 2f),
+                    end = Offset(center.x, center.y - innerArcRadius + innerStroke / 2f),
+                    strokeWidth = size.minDimension * 0.010f,
+                    cap = StrokeCap.Round,
+                )
             }
         }
 

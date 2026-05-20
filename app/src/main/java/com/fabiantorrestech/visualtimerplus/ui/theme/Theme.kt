@@ -60,6 +60,11 @@ private val OledColors = darkColorScheme(
     onSurface = OledText,
     onSurfaceVariant = OledText,
     outline = OledOutline,
+    surfaceContainer = OledBlack,
+    surfaceContainerHigh = OledSurface,
+    surfaceContainerHighest = OledSurfaceVariant,
+    surfaceContainerLow = OledBlack,
+    surfaceContainerLowest = OledBlack,
 )
 
 private val AppShapes = Shapes(

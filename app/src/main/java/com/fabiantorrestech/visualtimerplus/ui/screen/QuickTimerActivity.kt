@@ -82,6 +82,7 @@ import kotlinx.coroutines.withContext
 class QuickTimerActivity : ComponentActivity() {
 
     private lateinit var controller: TimerController
+    private var navigatingToMain = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -121,8 +122,10 @@ class QuickTimerActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        TimerRepository.setAppForeground(false)
-        TimerOverlayManager.setAppForeground(false)
+        if (!navigatingToMain) {
+            TimerRepository.setAppForeground(false)
+            TimerOverlayManager.setAppForeground(false)
+        }
     }
 
     private fun launchTimer(durationMillis: Long, presetId: Long?, name: String) {
@@ -137,17 +140,18 @@ class QuickTimerActivity : ComponentActivity() {
         controller.dispatch(TimerAction.SetDurationExact(durationMillis, newIndex))
         controller.dispatch(TimerAction.Start(newIndex))
 
-        TimerNotificationManager.showQuickStartNotification(this, newIndex, name, durationMillis)
         if (TimerRepository.state.value.autoOpenAppAfterQuickStart) {
             openMainActivity(targetTimerIndex = newIndex)
         } else {
+            TimerNotificationManager.showQuickStartNotification(this, newIndex, name, durationMillis)
             finish()
         }
     }
 
     private fun openMainActivity(targetTimerIndex: Int? = null) {
+        navigatingToMain = true
         val launchIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (targetTimerIndex != null) {
                 putExtra(TimerNotificationManager.EXTRA_TARGET_TIMER_INDEX, targetTimerIndex)
             }
@@ -306,6 +310,7 @@ private fun QuickTimerPopup(
                             onDurationChanged = { customDuration = it },
                             onStart = { attemptStart(customDuration, null, timerName) },
                             clockwiseModeEnabled = appState.defaultTimerSettings.clockwiseModeEnabled,
+                            isOledMode = appState.isOledMode,
                         )
                     }
                 }
@@ -381,6 +386,7 @@ private fun QuickDialTabContent(
     onDurationChanged: (Long) -> Unit,
     onStart: () -> Unit,
     clockwiseModeEnabled: Boolean,
+    isOledMode: Boolean = false,
 ) {
     var showPicker by remember { mutableStateOf(false) }
 
@@ -434,6 +440,7 @@ private fun QuickDialTabContent(
                     onDurationChanged = onDurationChanged,
                     showLabel = false,
                     clockwiseModeEnabled = clockwiseModeEnabled,
+                    isOledMode = isOledMode,
                     modifier = Modifier.size(160.dp),
                 )
             }
