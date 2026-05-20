@@ -220,4 +220,48 @@
     <string name="auto_backup_set_location">Set Backup Location</string>
     <string name="auto_backup_change_location">Change Backup Location</string>
     <string name="auto_backup_location_prefix">Location: </string>
+
+    <!-- App shortcuts -->
+    <string name="shortcut_quick_label">Quick Timer</string>
+    <string name="shortcut_quick_long_label">Start a Quick Timer</string>
+
+    <!-- Quick timer popup -->
+    <string name="quick_timer_title">Quick Timer</string>
+    <string name="quick_timer_tab_presets">My Presets</string>
+    <string name="quick_timer_tab_custom">Quick</string>
+    <string name="quick_timer_set">Set…</string>
+    <string name="quick_timer_name_hint">Timer name (optional)</string>
+    <string name="quick_timer_start">Start Timer</string>
+    <string name="quick_timer_max_reached">Maximum timers reached (%1$d)</string>
+    <string name="quick_timer_no_presets">No presets saved yet</string>
+    <string name="quick_start_notification_title">Timer started</string>
+    <string name="quick_start_notification_channel_name">Quick timer started</string>
+
+    <!-- Settings tabs -->
+    <string name="settings_tab_settings">Settings</string>
+    <string name="settings_tab_permissions">Permissions</string>
+
+    <!-- Permissions tab -->
+    <string name="perm_notifications_title">Notifications</string>
+    <string name="perm_notifications_desc">Show timer status and finish alerts in the notification bar</string>
+    <string name="perm_overlay_title">Display over other apps</string>
+    <string name="perm_overlay_desc">Show the floating timer overlay while using other apps</string>
+    <string name="perm_exact_alarm_title">Schedule exact alarms</string>
+    <string name="perm_exact_alarm_desc">Required for Scheduled Timers to start precisely on time</string>
+    <string name="perm_full_screen_title">Full screen alerts</string>
+    <string name="perm_full_screen_desc">Show timer completion alerts over the lock screen</string>
+    <string name="perm_granted">Granted</string>
+    <string name="perm_not_granted">Not granted</string>
+    <string name="perm_action_grant">Grant</string>
+    <string name="perm_action_open_settings">Open Settings</string>
+
+    <!-- Automation section -->
+    <string name="automation_title">Shortcuts &amp; Automation</string>
+    <string name="automation_dialog_title">Automation &amp; Shortcuts</string>
+    <string name="automation_dialog_close">Close</string>
+    <string name="automation_section_quick_timer">Open Quick Timer popup</string>
+    <string name="automation_section_control">Control timers (Service Intent)</string>
+    <string name="automation_section_macrodroid">MacroDroid</string>
+    <string name="automation_section_tasker">Tasker</string>
+    <string name="automation_section_keymapper">KeyMapper</string>
 </resources>

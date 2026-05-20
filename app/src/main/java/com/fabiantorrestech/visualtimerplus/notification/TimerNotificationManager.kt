@@ -383,7 +383,45 @@ class TimerNotificationManager(
         const val INDIVIDUAL_BASE = 2100
         const val RUNNING_CHANNEL_ID = "visual_timer_running_channel"
         const val FINISHED_CHANNEL_ID = "visual_timer_finished_channel"
+        const val QUICK_START_CHANNEL_ID = "visual_timer_quick_start_channel"
+        private const val QUICK_START_NOTIFICATION_BASE = 3000
         const val ACTION_CYCLE_TIMER = "com.fabiantorrestech.visualtimerplus.action.CYCLE_TIMER"
         const val EXTRA_TARGET_TIMER_INDEX = "target_timer_index"
+
+        fun showQuickStartNotification(
+            context: Context,
+            timerIndex: Int,
+            name: String,
+            durationMillis: Long,
+        ) {
+            val nm = context.getSystemService(NotificationManager::class.java)
+            val channel = NotificationChannel(
+                QUICK_START_CHANNEL_ID,
+                context.getString(R.string.quick_start_notification_channel_name),
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { setShowBadge(false) }
+            nm.createNotificationChannel(channel)
+
+            val label = name.ifBlank { durationMillis.formatClockTime() }
+            val launchIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(EXTRA_TARGET_TIMER_INDEX, timerIndex)
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                QUICK_START_NOTIFICATION_BASE + timerIndex,
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val notification = Notification.Builder(context, QUICK_START_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentTitle(context.getString(R.string.quick_start_notification_title))
+                .setContentText(label)
+                .setTimeoutAfter(5_000L)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .build()
+            nm.notify(QUICK_START_NOTIFICATION_BASE + timerIndex, notification)
+        }
     }
 }

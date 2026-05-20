@@ -1,9 +1,17 @@
 package com.fabiantorrestech.visualtimerplus.ui.screen
 
+import android.Manifest
+import android.app.AlarmManager
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
+import android.provider.Settings
+import androidx.core.content.ContextCompat
 import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -57,6 +65,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -73,8 +85,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -92,12 +106,16 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fabiantorrestech.visualtimerplus.R
 import com.fabiantorrestech.visualtimerplus.backup.AutoBackupManager
@@ -315,6 +333,7 @@ fun TimerScreen(
                 onSetDefaultDuration = { showDefaultDurationPicker = true },
                 overlayPermissionGranted = overlayPermissionGranted,
                 onOpenOverlayPermissionSettings = onOpenOverlayPermissionSettings,
+                onRequestNotificationPermission = onNotificationPermissionNeeded,
             )
         }
     }
@@ -649,6 +668,22 @@ private fun AddTimerPage(onAdd: () -> Unit) {
     }
 }
 
+private fun TimerStatus.isPreviewEditable(): Boolean =
+    this == TimerStatus.Idle || this == TimerStatus.Paused
+
+private fun liveCountdownText(timer: TimerInstance, now: Long): String =
+    when (timer.status) {
+        TimerStatus.Running -> {
+            val targetEndMillis = timer.targetEndTimeMillis ?: (now + timer.remainingMillis)
+            (targetEndMillis - now).coerceAtLeast(0L).formatClockTime()
+        }
+        TimerStatus.Overtime -> {
+            val overtimeStartedAtMillis = timer.overtimeStartedAtMillis ?: now
+            (now - overtimeStartedAtMillis).coerceAtLeast(0L).formatClockTime()
+        }
+        else -> timer.displayMillis.formatClockTime()
+    }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PortraitLayout(
@@ -674,9 +709,11 @@ private fun PortraitLayout(
     val settings = timer.settings
     var isDragging by remember { mutableStateOf(false) }
     var previewDurationMillis by remember(timer.id) { mutableStateOf<Long?>(null) }
+    val isPreviewEditable = timer.status.isPreviewEditable()
+    val effectivePreviewDurationMillis = if (isPreviewEditable) previewDurationMillis else null
     val minimalControlsInteractable = !isCleanModeActive || minimalUiAlpha > 0.99f
-    val effectiveDisplayMillis = previewDurationMillis ?: timer.displayMillis
-    val effectiveDurationForCommit = previewDurationMillis ?: timer.selectedDurationMillis
+    val effectiveDisplayMillis = effectivePreviewDurationMillis ?: timer.displayMillis
+    val effectiveDurationForCommit = effectivePreviewDurationMillis ?: timer.selectedDurationMillis
     val resolvedIdleTimer = if (
         timer.status == TimerStatus.Idle &&
         effectiveDurationForCommit != timer.selectedDurationMillis
@@ -689,8 +726,20 @@ private fun PortraitLayout(
         timer
     }
 
-    LaunchedEffect(isDragging, previewDurationMillis, timer.displayMillis) {
-        if (!isDragging && previewDurationMillis != null && previewDurationMillis == timer.displayMillis) {
+    LaunchedEffect(timer.status) {
+        if (!timer.status.isPreviewEditable()) {
+            isDragging = false
+            previewDurationMillis = null
+        }
+    }
+
+    LaunchedEffect(isDragging, isPreviewEditable, effectivePreviewDurationMillis, timer.displayMillis) {
+        if (
+            isPreviewEditable &&
+            !isDragging &&
+            effectivePreviewDurationMillis != null &&
+            effectivePreviewDurationMillis == timer.displayMillis
+        ) {
             previewDurationMillis = null
         }
     }
@@ -737,7 +786,7 @@ private fun PortraitLayout(
         HeroTimerCard(
             timer = timer,
             displayAlpha = if (isCleanModeActive) minimalUiAlpha else 1f,
-            previewDurationMillis = previewDurationMillis,
+            previewDurationMillis = effectivePreviewDurationMillis,
             onPreviewDurationChanged = { previewDurationMillis = it },
             onDragCommit = ::commitPreviewDuration,
             onCenterTap = {
@@ -823,7 +872,7 @@ private fun PortraitLayout(
                     clockPosition = settings.clockPosition,
                     textSizeSp = settings.endTimeSizeSp,
                     showSeconds = settings.showEndTimeSecondsEnabled,
-                    durationOverrideMillis = if (isDragging) effectiveDurationForCommit else null,
+                    durationOverrideMillis = if (isDragging && isPreviewEditable) effectiveDurationForCommit else null,
                     modifier = Modifier.alpha(
                         if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f,
                     ),
@@ -965,9 +1014,11 @@ private fun LandscapeLayout(
     val settings = timer.settings
     var isDragging by remember { mutableStateOf(false) }
     var previewDurationMillis by remember(timer.id) { mutableStateOf<Long?>(null) }
+    val isPreviewEditable = timer.status.isPreviewEditable()
+    val effectivePreviewDurationMillis = if (isPreviewEditable) previewDurationMillis else null
     val minimalControlsInteractable = !isCleanModeActive || minimalUiAlpha > 0.99f
-    val effectiveDisplayMillis = previewDurationMillis ?: timer.displayMillis
-    val effectiveDurationForCommit = previewDurationMillis ?: timer.selectedDurationMillis
+    val effectiveDisplayMillis = effectivePreviewDurationMillis ?: timer.displayMillis
+    val effectiveDurationForCommit = effectivePreviewDurationMillis ?: timer.selectedDurationMillis
     val resolvedIdleTimer = if (
         timer.status == TimerStatus.Idle &&
         effectiveDurationForCommit != timer.selectedDurationMillis
@@ -980,8 +1031,20 @@ private fun LandscapeLayout(
         timer
     }
 
-    LaunchedEffect(isDragging, previewDurationMillis, timer.displayMillis) {
-        if (!isDragging && previewDurationMillis != null && previewDurationMillis == timer.displayMillis) {
+    LaunchedEffect(timer.status) {
+        if (!timer.status.isPreviewEditable()) {
+            isDragging = false
+            previewDurationMillis = null
+        }
+    }
+
+    LaunchedEffect(isDragging, isPreviewEditable, effectivePreviewDurationMillis, timer.displayMillis) {
+        if (
+            isPreviewEditable &&
+            !isDragging &&
+            effectivePreviewDurationMillis != null &&
+            effectivePreviewDurationMillis == timer.displayMillis
+        ) {
             previewDurationMillis = null
         }
     }
@@ -1026,7 +1089,7 @@ private fun LandscapeLayout(
             HeroTimerCard(
                 timer = timer,
                 displayAlpha = if (isCleanModeActive) minimalUiAlpha else 1f,
-                previewDurationMillis = previewDurationMillis,
+                previewDurationMillis = effectivePreviewDurationMillis,
                 onPreviewDurationChanged = { previewDurationMillis = it },
                 onDragCommit = ::commitPreviewDuration,
                 onCenterTap = {
@@ -1114,7 +1177,7 @@ private fun LandscapeLayout(
                     clockPosition = settings.clockPosition,
                     textSizeSp = settings.endTimeSizeSp,
                     showSeconds = settings.showEndTimeSecondsEnabled,
-                    durationOverrideMillis = if (isDragging) effectiveDurationForCommit else null,
+                    durationOverrideMillis = if (isDragging && isPreviewEditable) effectiveDurationForCommit else null,
                     modifier = Modifier.alpha(
                         if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f,
                     ),
@@ -1391,22 +1454,18 @@ private fun HeroTimerCard(
 ) {
     val effectiveDisplayMillis = previewDurationMillis ?: timer.displayMillis
     // Drive countdown text at wall-clock second boundaries so it ticks in sync with CurrentTimeText.
-    var syncedCountdownText by remember { mutableStateOf(timer.displayMillis.formatClockTime()) }
+    var syncedCountdownText by remember(
+        timer.status,
+        timer.targetEndTimeMillis,
+        timer.overtimeStartedAtMillis,
+    ) {
+        mutableStateOf(liveCountdownText(timer, System.currentTimeMillis()))
+    }
     LaunchedEffect(timer.targetEndTimeMillis, timer.overtimeStartedAtMillis, timer.status) {
         if (timer.status != TimerStatus.Running && timer.status != TimerStatus.Overtime) return@LaunchedEffect
         while (true) {
             val now = System.currentTimeMillis()
-            syncedCountdownText = when (timer.status) {
-                TimerStatus.Running -> {
-                    val tgt = timer.targetEndTimeMillis ?: (now + timer.remainingMillis)
-                    (tgt - now).coerceAtLeast(0L).formatClockTime()
-                }
-                TimerStatus.Overtime -> {
-                    val started = timer.overtimeStartedAtMillis ?: now
-                    (now - started).coerceAtLeast(0L).formatClockTime()
-                }
-                else -> break
-            }
+            syncedCountdownText = liveCountdownText(timer, now)
             delay(1_000L - (now % 1_000L))
         }
     }
@@ -1486,6 +1545,7 @@ private fun SettingsSheetContent(
     onSetDefaultDuration: () -> Unit,
     overlayPermissionGranted: Boolean,
     onOpenOverlayPermissionSettings: () -> Unit,
+    onRequestNotificationPermission: () -> Unit,
 ) {
     val settings = timer.settings
     val context = LocalContext.current
@@ -1494,6 +1554,44 @@ private fun SettingsSheetContent(
     var pendingImportJson by remember { mutableStateOf<String?>(null) }
     var backupStatusMessage by remember { mutableStateOf<String?>(null) }
     val today = remember { LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) }
+
+    var selectedTab by remember { mutableIntStateOf(0) }
+    var showAutomationDialog by remember { mutableStateOf(false) }
+
+    var notifGranted by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var exactAlarmGranted by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+        )
+    }
+    var fullScreenGranted by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE ||
+                context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+        )
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                notifGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                exactAlarmGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                    context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+                fullScreenGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE ||
+                    context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     var autoBackupLocationUri by remember {
         mutableStateOf(AutoBackupManager.getSavedLocationUri(context))
@@ -1597,10 +1695,13 @@ private fun SettingsSheetContent(
         )
     }
 
+    if (showAutomationDialog) {
+        AutomationInfoDialog(onDismiss = { showAutomationDialog = false })
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
         Text(
@@ -1608,7 +1709,51 @@ private fun SettingsSheetContent(
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+        TabRow(selectedTabIndex = selectedTab) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = { Text(stringResource(R.string.settings_tab_settings)) },
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = { Text(stringResource(R.string.settings_tab_permissions)) },
+            )
+        }
+
+        if (selectedTab == 0) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = 16.dp),
+            ) {
+            // ── Automation ────────────────────────────────────────────────────────
+            SectionCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = stringResource(R.string.automation_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { showAutomationDialog = true }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_info_outline),
+                            contentDescription = stringResource(R.string.automation_dialog_title),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
         // ── App-global settings ────────────────────────────────────────────────
         SectionCard {
@@ -2086,8 +2231,217 @@ private fun SettingsSheetContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+            } // closes inner Settings Column
+        } else {
+            PermissionsTabContent(
+                notifGranted = notifGranted,
+                overlayGranted = overlayPermissionGranted,
+                exactAlarmGranted = exactAlarmGranted,
+                fullScreenGranted = fullScreenGranted,
+                onRequestNotification = onRequestNotificationPermission,
+                onOpenOverlaySettings = onOpenOverlayPermissionSettings,
+                onOpenExactAlarmSettings = {
+                    context.startActivity(
+                        Intent(
+                            Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                            Uri.parse("package:${context.packageName}"),
+                        )
+                    )
+                },
+                onOpenFullScreenSettings = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                                Uri.parse("package:${context.packageName}"),
+                            )
+                        )
+                    }
+                },
+            )
+        }
+    } // closes outer Column
+} // closes SettingsSheetContent
+
+@Composable
+private fun PermissionsTabContent(
+    notifGranted: Boolean,
+    overlayGranted: Boolean,
+    exactAlarmGranted: Boolean,
+    fullScreenGranted: Boolean,
+    onRequestNotification: () -> Unit,
+    onOpenOverlaySettings: () -> Unit,
+    onOpenExactAlarmSettings: () -> Unit,
+    onOpenFullScreenSettings: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(top = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            PermissionRow(
+                title = stringResource(R.string.perm_notifications_title),
+                description = stringResource(R.string.perm_notifications_desc),
+                granted = notifGranted,
+                grantLabel = stringResource(R.string.perm_action_grant),
+                onGrant = onRequestNotification,
+            )
+        }
+        PermissionRow(
+            title = stringResource(R.string.perm_overlay_title),
+            description = stringResource(R.string.perm_overlay_desc),
+            granted = overlayGranted,
+            grantLabel = stringResource(R.string.perm_action_open_settings),
+            onGrant = onOpenOverlaySettings,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PermissionRow(
+                title = stringResource(R.string.perm_exact_alarm_title),
+                description = stringResource(R.string.perm_exact_alarm_desc),
+                granted = exactAlarmGranted,
+                grantLabel = stringResource(R.string.perm_action_open_settings),
+                onGrant = onOpenExactAlarmSettings,
+            )
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            PermissionRow(
+                title = stringResource(R.string.perm_full_screen_title),
+                description = stringResource(R.string.perm_full_screen_desc),
+                granted = fullScreenGranted,
+                grantLabel = stringResource(R.string.perm_action_open_settings),
+                onGrant = onOpenFullScreenSettings,
+            )
+        }
     }
+}
+
+@Composable
+private fun PermissionRow(
+    title: String,
+    description: String,
+    granted: Boolean,
+    grantLabel: String,
+    onGrant: () -> Unit,
+) {
+    SectionCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            if (granted) {
+                Text(
+                    text = stringResource(R.string.perm_granted),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            } else {
+                AssistChip(
+                    onClick = onGrant,
+                    label = { Text(grantLabel, style = MaterialTheme.typography.labelMedium) },
+                    shape = RoundedCornerShape(18.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AutomationInfoDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.automation_dialog_title)) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                AutomationDialogSection(title = stringResource(R.string.automation_section_quick_timer)) {
+                    AutomationMonoLine("Action: com.fabiantorrestech.visualtimerplus.ACTION_QUICK_TIMER")
+                    AutomationMonoLine("Target: QuickTimerActivity")
+                    AutomationMonoLine("Type: Activity intent")
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                AutomationDialogSection(title = stringResource(R.string.automation_section_control)) {
+                    AutomationMonoLine("Target service: com.fabiantorrestech.visualtimerplus.timer.TimerService")
+                    Spacer(modifier = Modifier.height(4.dp))
+                    AutomationMonoLine("…action.START — start the active timer")
+                    AutomationMonoLine("…action.PAUSE — pause")
+                    AutomationMonoLine("…action.RESUME — resume")
+                    AutomationMonoLine("…action.RESET — reset to idle")
+                    AutomationMonoLine("…action.RESTART — restart from original duration")
+                    Spacer(modifier = Modifier.height(4.dp))
+                    AutomationMonoLine("Extra (optional): timer_index (int, 0-based)")
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                AutomationDialogSection(title = stringResource(R.string.automation_section_macrodroid)) {
+                    AutomationMonoLine("1. Add Action → Device Actions → Send Intent")
+                    AutomationMonoLine("2. Target: Activity")
+                    AutomationMonoLine("3. Action:    …ACTION_QUICK_TIMER")
+                    AutomationMonoLine("4. Package:   com.fabiantorrestech.visualtimerplus")
+                    AutomationMonoLine("5. Component: …ui.screen.QuickTimerActivity")
+                    AutomationMonoLine("6. Data URI:  (leave EMPTY — not the class name)")
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                AutomationDialogSection(title = stringResource(R.string.automation_section_tasker)) {
+                    AutomationMonoLine("1. New Task → + → System → Send Intent")
+                    AutomationMonoLine("2. Action:  …ACTION_QUICK_TIMER")
+                    AutomationMonoLine("3. Package: com.fabiantorrestech.visualtimerplus")
+                    AutomationMonoLine("4. Class:   …ui.screen.QuickTimerActivity")
+                    AutomationMonoLine("5. Target:  Activity")
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                AutomationDialogSection(title = stringResource(R.string.automation_section_keymapper)) {
+                    AutomationMonoLine("1. New Key Map → Add Action → Intent")
+                    AutomationMonoLine("2. Target:    Activity")
+                    AutomationMonoLine("3. Action:    …ACTION_QUICK_TIMER")
+                    AutomationMonoLine("4. Package:   com.fabiantorrestech.visualtimerplus")
+                    AutomationMonoLine("5. Component: …ui.screen.QuickTimerActivity")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.automation_dialog_close))
+            }
+        },
+    )
+}
+
+@Composable
+private fun AutomationDialogSection(title: String, content: @Composable () -> Unit) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    content()
+}
+
+@Composable
+private fun AutomationMonoLine(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall.copy(
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+        ),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
