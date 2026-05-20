@@ -15,7 +15,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Paint as ComposePaint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -38,7 +40,7 @@ fun QuickTimerDial(
     val primaryColor = MaterialTheme.colorScheme.primary
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
-    val cueColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.62f)
+    val cueColor = MaterialTheme.colorScheme.outline
 
     var totalAngle by remember { mutableFloatStateOf(0f) }
 
@@ -92,7 +94,7 @@ fun QuickTimerDial(
             )
 
             val cueStroke = strokeWidth * 0.34f
-            val cueRadius = (size.minDimension / 2f) - cueStroke
+            val cueRadius = (size.minDimension / 2f) - (cueStroke * 0.55f)
             val cueSweep = if (clockwiseModeEnabled) 60f else -60f
             val cueEndAngle = -90f + cueSweep
             val cueEndAngleRad = Math.toRadians(cueEndAngle.toDouble()).toFloat()
@@ -117,6 +119,16 @@ fun QuickTimerDial(
                 )
                 close()
             }
+            val cuePaint = ComposePaint().apply { alpha = 0.62f }
+            drawContext.canvas.saveLayer(
+                Rect(
+                    center.x - cueRadius - cueHeadSize,
+                    center.y - cueRadius - cueHeadSize,
+                    center.x + cueRadius + cueHeadSize,
+                    center.y + cueRadius + cueHeadSize,
+                ),
+                cuePaint,
+            )
             drawArc(
                 color = cueColor,
                 startAngle = -90f,
@@ -130,6 +142,7 @@ fun QuickTimerDial(
                 path = cueHeadPath,
                 color = cueColor,
             )
+            drawContext.canvas.restore()
 
             // Primary arc (current hour progress)
             // At exactly 360° (1h) or 720° (2h), % gives 0 — keep the ring full instead
