@@ -1,8 +1,10 @@
 package com.fabiantorrestech.visualtimerplus
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -70,6 +72,9 @@ class MainActivity : ComponentActivity() {
             var overlayPermissionGranted by remember {
                 mutableStateOf(TimerOverlayManager.canDrawOverlays(applicationContext))
             }
+            var accessibilityServiceConnected by remember {
+                mutableStateOf(TimerOverlayManager.isAccessibilityServiceConnected())
+            }
             var shouldRequestNotifications by remember { mutableStateOf(false) }
             val notificationPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestPermission(),
@@ -91,9 +96,11 @@ class MainActivity : ComponentActivity() {
                             TimerRepository.setAppForeground(true)
                             TimerOverlayManager.setAppForeground(true)
                             overlayPermissionGranted = TimerOverlayManager.canDrawOverlays(applicationContext)
+                            accessibilityServiceConnected = TimerOverlayManager.isAccessibilityServiceConnected()
                         }
                         Lifecycle.Event.ON_RESUME -> {
                             overlayPermissionGranted = TimerOverlayManager.canDrawOverlays(applicationContext)
+                            accessibilityServiceConnected = TimerOverlayManager.isAccessibilityServiceConnected()
                         }
                         Lifecycle.Event.ON_STOP -> {
                             TimerRepository.setAppForeground(false)
@@ -178,6 +185,10 @@ class MainActivity : ComponentActivity() {
                             overlayPermissionGranted = overlayPermissionGranted,
                             onOpenOverlayPermissionSettings = {
                                 startActivity(TimerOverlayManager.permissionSettingsIntent(applicationContext))
+                            },
+                            accessibilityServiceConnected = accessibilityServiceConnected,
+                            onOpenAccessibilitySettings = {
+                                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                             },
                             db = db,
                             openPresetsOnLaunch = openPresetsOnLaunch,

@@ -166,6 +166,8 @@ fun TimerScreen(
     onOpenLog: () -> Unit,
     overlayPermissionGranted: Boolean,
     onOpenOverlayPermissionSettings: () -> Unit,
+    accessibilityServiceConnected: Boolean,
+    onOpenAccessibilitySettings: () -> Unit,
     db: AppDatabase,
     openPresetsOnLaunch: Boolean = false,
 ) {
@@ -333,6 +335,8 @@ fun TimerScreen(
                 onSetDefaultDuration = { showDefaultDurationPicker = true },
                 overlayPermissionGranted = overlayPermissionGranted,
                 onOpenOverlayPermissionSettings = onOpenOverlayPermissionSettings,
+                accessibilityServiceConnected = accessibilityServiceConnected,
+                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
                 onRequestNotificationPermission = onNotificationPermissionNeeded,
             )
         }
@@ -1545,6 +1549,8 @@ private fun SettingsSheetContent(
     onSetDefaultDuration: () -> Unit,
     overlayPermissionGranted: Boolean,
     onOpenOverlayPermissionSettings: () -> Unit,
+    accessibilityServiceConnected: Boolean,
+    onOpenAccessibilitySettings: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
 ) {
     val settings = timer.settings
@@ -1829,9 +1835,24 @@ private fun SettingsSheetContent(
                 Spacer(modifier = Modifier.height(4.dp))
                 PreferenceToggle(
                     label = stringResource(R.string.overlay_show_on_lockscreen),
+                    description = stringResource(R.string.overlay_show_on_lockscreen_desc),
                     checked = appState.overlayShowOnLockscreen,
                     onCheckedChange = { onAction(TimerAction.SetOverlayShowOnLockscreen(it)) },
                 )
+                if (appState.overlayShowOnLockscreen && !accessibilityServiceConnected) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.overlay_accessibility_required),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    AssistChip(
+                        onClick = onOpenAccessibilitySettings,
+                        label = { Text(stringResource(R.string.overlay_open_accessibility_settings)) },
+                        shape = RoundedCornerShape(18.dp),
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(12.dp))
             OverlaySizeSelector(
@@ -2245,6 +2266,7 @@ private fun SettingsSheetContent(
                 overlayGranted = overlayPermissionGranted,
                 exactAlarmGranted = exactAlarmGranted,
                 fullScreenGranted = fullScreenGranted,
+                accessibilityServiceConnected = accessibilityServiceConnected,
                 onRequestNotification = onRequestNotificationPermission,
                 onOpenOverlaySettings = onOpenOverlayPermissionSettings,
                 onOpenExactAlarmSettings = {
@@ -2265,6 +2287,7 @@ private fun SettingsSheetContent(
                         )
                     }
                 },
+                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
             )
         }
     } // closes outer Column
@@ -2276,10 +2299,12 @@ private fun PermissionsTabContent(
     overlayGranted: Boolean,
     exactAlarmGranted: Boolean,
     fullScreenGranted: Boolean,
+    accessibilityServiceConnected: Boolean,
     onRequestNotification: () -> Unit,
     onOpenOverlaySettings: () -> Unit,
     onOpenExactAlarmSettings: () -> Unit,
     onOpenFullScreenSettings: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -2322,6 +2347,13 @@ private fun PermissionsTabContent(
                 onGrant = onOpenFullScreenSettings,
             )
         }
+        PermissionRow(
+            title = stringResource(R.string.perm_accessibility_title),
+            description = stringResource(R.string.perm_accessibility_desc),
+            granted = accessibilityServiceConnected,
+            grantLabel = stringResource(R.string.perm_action_open_settings),
+            onGrant = onOpenAccessibilitySettings,
+        )
     }
 }
 
@@ -2738,13 +2770,27 @@ private fun CanvasAdjustButton(
 }
 
 @Composable
-private fun PreferenceToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun PreferenceToggle(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    description: String? = null,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            if (description != null) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Spacer(modifier = Modifier.width(12.dp))
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }

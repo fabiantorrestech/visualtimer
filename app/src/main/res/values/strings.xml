@@ -207,6 +207,10 @@
     <string name="overlay_permission_granted">Overlay permission granted.</string>
     <string name="overlay_open_settings">Open overlay settings</string>
     <string name="overlay_show_on_lockscreen">Show over lock screen</string>
+    <string name="overlay_show_on_lockscreen_desc">Shows the overlay while the screen is locked or over system UI. Does not wake the display.</string>
+    <string name="accessibility_service_description">Allows the timer overlay to appear above the lock screen and system surfaces.</string>
+    <string name="overlay_accessibility_required">Accessibility service not enabled — overlay will not show on lock screen.</string>
+    <string name="overlay_open_accessibility_settings">Enable accessibility service</string>
     <string name="save_defaults">Save Defaults</string>
     <string name="backup_restore_title">Backup &amp; Restore</string>
     <string name="backup_export">Export</string>
@@ -251,6 +255,8 @@
     <string name="perm_exact_alarm_desc">Required for Scheduled Timers to start precisely on time</string>
     <string name="perm_full_screen_title">Full screen alerts</string>
     <string name="perm_full_screen_desc">Show timer completion alerts over the lock screen</string>
+    <string name="perm_accessibility_title">Accessibility service</string>
+    <string name="perm_accessibility_desc">Required for the floating overlay to appear above the lock screen</string>
     <string name="perm_granted">Granted</string>
     <string name="perm_not_granted">Not granted</string>
     <string name="perm_action_grant">Grant</string>

@@ -1,5 +1,6 @@
 package com.fabiantorrestech.visualtimerplus.overlay
 
+import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
@@ -46,6 +47,10 @@ object TimerOverlayManager {
     private var isAppForeground = false
     private var latestState: AppState = AppState()
 
+    private var accessibilityWindowManager: WindowManager? = null
+    private var activeWindowManager: WindowManager? = null
+    private var activeWindowType: Int = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+
     private var overlayView: OverlayTimerView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var touchListener: OverlayTouchListener? = null
@@ -90,6 +95,22 @@ object TimerOverlayManager {
             Uri.parse("package:${context.packageName}"),
         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
+    fun onAccessibilityServiceConnected(service: AccessibilityService) {
+        accessibilityWindowManager = service.getSystemService(WindowManager::class.java)
+        // If lockscreen overlay is wanted and is already live with the wrong type, recreate it
+        if (latestState.overlayShowOnLockscreen && overlayView != null) removeOverlay()
+        refreshOverlay()
+    }
+
+    fun onAccessibilityServiceDisconnected() {
+        // Overlay may have been added via the accessibility WM; must remove through the same WM
+        if (overlayView != null && activeWindowManager === accessibilityWindowManager) removeOverlay()
+        accessibilityWindowManager = null
+        refreshOverlay()
+    }
+
+    fun isAccessibilityServiceConnected(): Boolean = accessibilityWindowManager != null
+
     private fun refreshOverlay() {
         if (!initialized) return
         val timerIndex = latestState.overlayTimerIndex
@@ -110,7 +131,20 @@ object TimerOverlayManager {
     }
 
     private fun ensureOverlayView() {
-        if (overlayView != null && layoutParams != null) return
+        val useAccessibility = accessibilityWindowManager != null && latestState.overlayShowOnLockscreen
+        val desiredType = if (useAccessibility)
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+        else
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+
+        if (overlayView != null && layoutParams != null) {
+            if (activeWindowType == desiredType) return
+            removeOverlay() // window type changed — must recreate
+        }
+
+        val effectiveWm = if (useAccessibility) accessibilityWindowManager!! else windowManager
+        activeWindowManager = effectiveWm
+        activeWindowType = desiredType
 
         val sizePx = sizePx(latestState.overlaySize)
         val overlay = OverlayTimerView(appContext)
@@ -128,7 +162,7 @@ object TimerOverlayManager {
         val params = WindowManager.LayoutParams(
             sizePx,
             sizePx,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            desiredType,
             baseFlags or lockscreenFlag,
             PixelFormat.TRANSLUCENT,
         ).apply {
@@ -144,7 +178,7 @@ object TimerOverlayManager {
             }
         }
 
-        windowManager.addView(overlay, params)
+        effectiveWm.addView(overlay, params)
         overlayView = overlay
         layoutParams = params
         ViewCompat.requestApplyInsets(overlay)
@@ -188,12 +222,14 @@ object TimerOverlayManager {
 
     private fun removeOverlay() {
         val view = overlayView ?: return
+        val wm = activeWindowManager ?: windowManager
         try {
-            windowManager.removeView(view)
+            wm.removeView(view)
         } catch (_: IllegalArgumentException) {
         }
         overlayView = null
         layoutParams = null
+        activeWindowManager = null
         touchListener = null
         touchListenerTimerIndex = -1
         clearImeTracking()
@@ -276,8 +312,11 @@ object TimerOverlayManager {
     }
 
     private fun updateOverlayLayout(params: WindowManager.LayoutParams) {
-        overlayView?.let { view ->
-            windowManager.updateViewLayout(view, params)
+        val view = overlayView ?: return
+        val wm = activeWindowManager ?: windowManager
+        try {
+            wm.updateViewLayout(view, params)
+        } catch (_: IllegalArgumentException) {
         }
     }
 
