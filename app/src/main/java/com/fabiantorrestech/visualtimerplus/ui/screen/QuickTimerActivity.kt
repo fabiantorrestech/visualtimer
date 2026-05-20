@@ -2,6 +2,7 @@ package com.fabiantorrestech.visualtimerplus.ui.screen
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.ImageView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
@@ -53,8 +54,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.style.TextAlign
 import com.fabiantorrestech.visualtimerplus.MainActivity
@@ -227,11 +231,21 @@ private fun QuickTimerPopup(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconButton(onClick = onOpenApp) {
-                            Icon(
-                                painter = painterResource(R.mipmap.ic_launcher),
-                                contentDescription = stringResource(R.string.quick_timer_open_app),
-                                tint = Color.Unspecified,
+                        val openAppDescription = stringResource(R.string.quick_timer_open_app)
+                        IconButton(
+                            onClick = onOpenApp,
+                            modifier = Modifier.semantics {
+                                contentDescription = openAppDescription
+                            },
+                        ) {
+                            AndroidView(
+                                factory = { viewContext ->
+                                    ImageView(viewContext).apply {
+                                        scaleType = ImageView.ScaleType.FIT_CENTER
+                                        setImageResource(R.mipmap.ic_launcher)
+                                        contentDescription = null
+                                    }
+                                },
                                 modifier = Modifier.size(22.dp),
                             )
                         }
