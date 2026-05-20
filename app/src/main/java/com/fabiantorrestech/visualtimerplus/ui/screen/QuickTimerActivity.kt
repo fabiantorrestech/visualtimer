@@ -1,10 +1,10 @@
 package com.fabiantorrestech.visualtimerplus.ui.screen
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,11 +34,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,12 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -63,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.style.TextAlign
+import com.fabiantorrestech.visualtimerplus.MainActivity
 import com.fabiantorrestech.visualtimerplus.R
 import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.db.PresetEntity
@@ -77,9 +72,6 @@ import com.fabiantorrestech.visualtimerplus.ui.component.DurationPickerSheet
 import com.fabiantorrestech.visualtimerplus.ui.component.QuickTimerDial
 import com.fabiantorrestech.visualtimerplus.ui.theme.VisualTimerPlusTheme
 import com.fabiantorrestech.visualtimerplus.util.formatClockTime
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -108,6 +100,7 @@ class QuickTimerActivity : ComponentActivity() {
             ) {
                 QuickTimerPopup(
                     onDismiss = { finish() },
+                    onOpenApp = { openMainActivity() },
                     onLaunchTimer = { durationMillis, presetId, name ->
                         launchTimer(durationMillis, presetId, name)
                     },
@@ -141,6 +134,21 @@ class QuickTimerActivity : ComponentActivity() {
         controller.dispatch(TimerAction.Start(newIndex))
 
         TimerNotificationManager.showQuickStartNotification(this, newIndex, name, durationMillis)
+        if (TimerRepository.state.value.autoOpenAppAfterQuickStart) {
+            openMainActivity(targetTimerIndex = newIndex)
+        } else {
+            finish()
+        }
+    }
+
+    private fun openMainActivity(targetTimerIndex: Int? = null) {
+        val launchIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (targetTimerIndex != null) {
+                putExtra(TimerNotificationManager.EXTRA_TARGET_TIMER_INDEX, targetTimerIndex)
+            }
+        }
+        startActivity(launchIntent)
         finish()
     }
 }
@@ -149,18 +157,20 @@ class QuickTimerActivity : ComponentActivity() {
 @Composable
 private fun QuickTimerPopup(
     onDismiss: () -> Unit,
+    onOpenApp: () -> Unit,
     onLaunchTimer: (durationMillis: Long, presetId: Long?, name: String) -> Unit,
 ) {
     val context = LocalContext.current
     val appState by TimerRepository.state.collectAsStateWithLifecycle()
     var timerName by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(1) }
     var customDuration by remember { mutableLongStateOf(0L) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var presets by remember { mutableStateOf<List<PresetEntity>>(emptyList()) }
 
     val db = remember { AppDatabase.getInstance(context.applicationContext) }
     val maxTimersError = stringResource(R.string.quick_timer_max_reached, MAX_TIMERS)
+    val popupContainerColor = if (appState.isOledMode) Color.Black else MaterialTheme.colorScheme.surfaceContainerHigh
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -195,6 +205,7 @@ private fun QuickTimerPopup(
                 ) { /* consume to prevent scrim dismiss */ },
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = popupContainerColor),
         ) {
             Column(
                 modifier = Modifier
@@ -203,10 +214,6 @@ private fun QuickTimerPopup(
                     .imePadding()
                     .padding(horizontal = 20.dp, vertical = 16.dp),
             ) {
-                BottomSheetDefaults.DragHandle(modifier = Modifier.align(Alignment.CenterHorizontally))
-
-                Spacer(Modifier.height(4.dp))
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -216,11 +223,24 @@ private fun QuickTimerPopup(
                         text = stringResource(R.string.quick_timer_title),
                         style = MaterialTheme.typography.titleLarge,
                     )
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_close),
-                            contentDescription = stringResource(R.string.cancel),
-                        )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = onOpenApp) {
+                            Icon(
+                                painter = painterResource(R.mipmap.ic_launcher),
+                                contentDescription = stringResource(R.string.quick_timer_open_app),
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                        IconButton(onClick = onDismiss) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_close),
+                                contentDescription = stringResource(R.string.cancel),
+                            )
+                        }
                     }
                 }
 
@@ -242,7 +262,10 @@ private fun QuickTimerPopup(
 
                 Spacer(Modifier.height(12.dp))
 
-                TabRow(selectedTabIndex = selectedTab) {
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = popupContainerColor,
+                ) {
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0; errorMessage = null },
@@ -374,14 +397,16 @@ private fun QuickDialTabContent(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.align(Alignment.Center),
                 )
-                TextButton(
+                OutlinedButton(
                     onClick = { showPicker = true },
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .heightIn(min = 40.dp),
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
                 ) {
                     Text(
                         text = stringResource(R.string.quick_timer_set),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }
@@ -394,13 +419,8 @@ private fun QuickDialTabContent(
                     durationMillis = customDuration,
                     onDurationChanged = onDurationChanged,
                     showLabel = false,
+                    clockwiseModeEnabled = clockwiseModeEnabled,
                     modifier = Modifier.size(160.dp),
-                )
-                DirectionArrow(
-                    clockwise = clockwiseModeEnabled,
-                    modifier = Modifier
-                        .size(22.dp)
-                        .alpha(0.55f),
                 )
             }
         }
@@ -423,38 +443,5 @@ private fun QuickDialTabContent(
             },
             onDismiss = { showPicker = false },
         )
-    }
-}
-
-@Composable
-private fun DirectionArrow(clockwise: Boolean, modifier: Modifier = Modifier) {
-    val color = MaterialTheme.colorScheme.onSurface
-    Canvas(modifier = modifier) {
-        val radius = size.minDimension / 2f
-        val strokeWidth = size.minDimension * 0.18f
-        val sweepSign = if (clockwise) 1f else -1f
-        val arcSweep = sweepSign * 90f
-        val endAngleRad = Math.toRadians((-90.0 + arcSweep)).toFloat()
-        val tipX = center.x + radius * cos(endAngleRad)
-        val tipY = center.y + radius * sin(endAngleRad)
-        val tangentRad = endAngleRad + (if (clockwise) (PI / 2).toFloat() else (-PI / 2).toFloat())
-        val headSize = size.minDimension * 0.38f
-
-        val arrowPath = Path()
-        arrowPath.moveTo(tipX + headSize * cos(tangentRad), tipY + headSize * sin(tangentRad))
-        arrowPath.lineTo(tipX + headSize * 0.55f * cos(tangentRad + 2.2f), tipY + headSize * 0.55f * sin(tangentRad + 2.2f))
-        arrowPath.lineTo(tipX + headSize * 0.55f * cos(tangentRad - 2.2f), tipY + headSize * 0.55f * sin(tangentRad - 2.2f))
-        arrowPath.close()
-
-        drawArc(
-            color = color,
-            startAngle = -90f,
-            sweepAngle = arcSweep,
-            useCenter = false,
-            topLeft = Offset(center.x - radius, center.y - radius),
-            size = Size(radius * 2f, radius * 2f),
-            style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
-        )
-        drawPath(arrowPath, color = color)
     }
 }
