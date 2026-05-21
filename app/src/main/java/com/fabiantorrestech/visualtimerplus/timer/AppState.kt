@@ -22,6 +22,8 @@ data class AppState(
     val overlayEnabled: Boolean = true,
     val overlaySize: OverlaySize = OverlaySize.Medium,
     val overlayStyle: OverlayStyle = OverlayStyle.Ring,
+    val overlayShowTimerName: Boolean = false,
+    val overlayTimerNamePosition: OverlayLabelPosition = OverlayLabelPosition.Top,
     val overlayShowOnLockscreen: Boolean = false,
     val autoBackupEnabled: Boolean = false,
     val autoOpenAppAfterQuickStart: Boolean = true,

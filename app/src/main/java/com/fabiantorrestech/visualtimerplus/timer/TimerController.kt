@@ -206,6 +206,16 @@ class TimerController(context: Context) {
                 AutoBackupManager.scheduleBackup(appContext)
             }
 
+            is TimerAction.SetOverlayShowTimerName -> {
+                TimerRepository.update { state -> state.copy(overlayShowTimerName = action.enabled) }
+                AutoBackupManager.scheduleBackup(appContext)
+            }
+
+            is TimerAction.SetOverlayTimerNamePosition -> {
+                TimerRepository.update { state -> state.copy(overlayTimerNamePosition = action.position) }
+                AutoBackupManager.scheduleBackup(appContext)
+            }
+
             is TimerAction.SetOverlayShowOnLockscreen -> {
                 TimerRepository.update { state -> state.copy(overlayShowOnLockscreen = action.enabled) }
                 AutoBackupManager.scheduleBackup(appContext)

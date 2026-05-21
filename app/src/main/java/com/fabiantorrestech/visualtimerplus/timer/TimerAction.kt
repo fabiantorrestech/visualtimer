@@ -61,6 +61,8 @@ sealed interface TimerAction {
     data class SetOverlayEnabled(val enabled: Boolean) : TimerAction
     data class SetOverlaySize(val size: OverlaySize) : TimerAction
     data class SetOverlayStyle(val style: OverlayStyle) : TimerAction
+    data class SetOverlayShowTimerName(val enabled: Boolean) : TimerAction
+    data class SetOverlayTimerNamePosition(val position: OverlayLabelPosition) : TimerAction
     data class SetOverlayShowOnLockscreen(val enabled: Boolean) : TimerAction
     data class SetAutoBackupEnabled(val enabled: Boolean) : TimerAction
     data class SetAutoOpenAppAfterQuickStart(val enabled: Boolean) : TimerAction

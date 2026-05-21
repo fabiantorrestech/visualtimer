@@ -20,6 +20,8 @@ object TimerRepository {
     private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
     private const val KEY_OVERLAY_SIZE = "overlay_size"
     private const val KEY_OVERLAY_STYLE = "overlay_style"
+    private const val KEY_OVERLAY_SHOW_TIMER_NAME = "overlay_show_timer_name"
+    private const val KEY_OVERLAY_TIMER_NAME_POSITION = "overlay_timer_name_position"
     private const val KEY_OVERLAY_SHOW_ON_LOCKSCREEN = "overlay_show_on_lockscreen"
     private const val KEY_AUTO_BACKUP_ENABLED = "auto_backup_enabled"
     private const val KEY_AUTO_OPEN_APP_AFTER_QUICK_START = "auto_open_app_after_quick_start"
@@ -177,6 +179,9 @@ object TimerRepository {
         val overlayStyle = preferences.getString(KEY_OVERLAY_STYLE, null)
             ?.let { name -> OverlayStyle.entries.firstOrNull { it.name == name } }
             ?: OverlayStyle.Ring
+        val overlayTimerNamePosition = preferences.getString(KEY_OVERLAY_TIMER_NAME_POSITION, null)
+            ?.let { name -> OverlayLabelPosition.entries.firstOrNull { it.name == name } }
+            ?: OverlayLabelPosition.Top
 
         return AppState(
             timers = timers,
@@ -192,6 +197,8 @@ object TimerRepository {
             overlayEnabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, true),
             overlaySize = overlaySize,
             overlayStyle = overlayStyle,
+            overlayShowTimerName = preferences.getBoolean(KEY_OVERLAY_SHOW_TIMER_NAME, false),
+            overlayTimerNamePosition = overlayTimerNamePosition,
             overlayShowOnLockscreen = preferences.getBoolean(KEY_OVERLAY_SHOW_ON_LOCKSCREEN, false),
             autoBackupEnabled = preferences.getBoolean(KEY_AUTO_BACKUP_ENABLED, false),
             autoOpenAppAfterQuickStart = preferences.getBoolean(KEY_AUTO_OPEN_APP_AFTER_QUICK_START, true),
@@ -323,6 +330,8 @@ object TimerRepository {
             .putBoolean(KEY_OVERLAY_ENABLED, state.overlayEnabled)
             .putString(KEY_OVERLAY_SIZE, state.overlaySize.name)
             .putString(KEY_OVERLAY_STYLE, state.overlayStyle.name)
+            .putBoolean(KEY_OVERLAY_SHOW_TIMER_NAME, state.overlayShowTimerName)
+            .putString(KEY_OVERLAY_TIMER_NAME_POSITION, state.overlayTimerNamePosition.name)
             .putBoolean(KEY_OVERLAY_SHOW_ON_LOCKSCREEN, state.overlayShowOnLockscreen)
             .putBoolean(KEY_AUTO_BACKUP_ENABLED, state.autoBackupEnabled)
             .putBoolean(KEY_AUTO_OPEN_APP_AFTER_QUICK_START, state.autoOpenAppAfterQuickStart)

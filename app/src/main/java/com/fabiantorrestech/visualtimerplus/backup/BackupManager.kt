@@ -40,6 +40,8 @@ object BackupManager {
             put("overlay_enabled", prefs.getBoolean("overlay_enabled", true))
             put("overlay_size", prefs.getString("overlay_size", "Medium") ?: "Medium")
             put("overlay_style", prefs.getString("overlay_style", "Ring") ?: "Ring")
+            put("overlay_show_timer_name", prefs.getBoolean("overlay_show_timer_name", false))
+            put("overlay_timer_name_position", prefs.getString("overlay_timer_name_position", "Top") ?: "Top")
             put("overlay_show_on_lockscreen", prefs.getBoolean("overlay_show_on_lockscreen", false))
         })
 
@@ -138,6 +140,8 @@ object BackupManager {
             editor.putBoolean("overlay_enabled", o.optBoolean("overlay_enabled", true))
             editor.putString("overlay_size", o.optString("overlay_size", "Medium"))
             editor.putString("overlay_style", o.optString("overlay_style", "Ring"))
+            editor.putBoolean("overlay_show_timer_name", o.optBoolean("overlay_show_timer_name", false))
+            editor.putString("overlay_timer_name_position", o.optString("overlay_timer_name_position", "Top"))
             editor.putBoolean("overlay_show_on_lockscreen", o.optBoolean("overlay_show_on_lockscreen", false))
         }
 

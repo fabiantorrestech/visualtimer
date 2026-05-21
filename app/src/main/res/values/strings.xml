@@ -203,6 +203,10 @@
     <string name="overlay_style_label">Overlay style</string>
     <string name="overlay_style_ring">Style 1</string>
     <string name="overlay_style_timer_face">Style 2</string>
+    <string name="overlay_show_timer_name">Show timer name on collapsed overlay</string>
+    <string name="overlay_timer_name_position">Collapsed timer name position</string>
+    <string name="overlay_timer_name_position_top">Top</string>
+    <string name="overlay_timer_name_position_bottom">Bottom</string>
     <string name="overlay_permission_required">Overlay permission required to show the timer over other apps.</string>
     <string name="overlay_permission_granted">Overlay permission granted.</string>
     <string name="overlay_open_settings">Open overlay settings</string>

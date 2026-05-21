@@ -27,6 +27,7 @@ import com.fabiantorrestech.visualtimerplus.MainActivity
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
 import com.fabiantorrestech.visualtimerplus.timer.AppState
 import com.fabiantorrestech.visualtimerplus.timer.ONE_HOUR_MILLIS
+import com.fabiantorrestech.visualtimerplus.timer.OverlayLabelPosition
 import com.fabiantorrestech.visualtimerplus.timer.OverlaySize
 import com.fabiantorrestech.visualtimerplus.timer.OverlayStyle
 import com.fabiantorrestech.visualtimerplus.timer.TimerInstance
@@ -41,8 +42,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 object TimerOverlayManager {
     private lateinit var appContext: Context
@@ -59,18 +62,22 @@ object TimerOverlayManager {
     private var activeWindowType: Int = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
 
     private var overlayContainer: LinearLayout? = null
+    private var overlayTimerStack: LinearLayout? = null
     private var overlayView: OverlayTimerView? = null
+    private var overlayLabelView: OverlayNameLabelView? = null
     private var overlayPanel: OverlayPanelView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var touchListener: OverlayTouchListener? = null
     private var touchListenerTimerIndex: Int = -1
     private var imeBottomInset = 0
     private var imeRestorePosition: OverlayPosition? = null
+    private var panelCollapsedRestorePosition: OverlayPosition? = null
     private var overlayAutoMovedForIme = false
     private var overlayMovedByUserWhileImeVisible = false
 
     private var isPanelOpen: Boolean = false
     private var isSnappedLeft: Boolean = false
+    private var renderedCollapsedLabelPosition: OverlayLabelPosition? = null
     private var panelFocusedTimerIndex: Int = 0
     private val longPressHandler = Handler(Looper.getMainLooper())
 
@@ -81,6 +88,7 @@ object TimerOverlayManager {
     private const val PANEL_WIDTH_DP = 176
     private const val LONG_PRESS_DURATION_MS = 500L
     private const val IME_CLEARANCE_DP = 16
+    private const val LABEL_EDGE_CLEARANCE_DP = 6
 
     fun initialize(context: Context) {
         if (initialized) return
@@ -163,11 +171,16 @@ object TimerOverlayManager {
         activeWindowType = desiredType
 
         val sizePx = sizePx(latestState.overlaySize)
+        val label = OverlayNameLabelView(appContext)
         val overlay = OverlayTimerView(appContext)
+        val timerStack = LinearLayout(appContext).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        timerStack.addView(overlay, LinearLayout.LayoutParams(sizePx, sizePx))
         val container = LinearLayout(appContext).apply {
             orientation = LinearLayout.HORIZONTAL
         }
-        container.addView(overlay, LinearLayout.LayoutParams(sizePx, sizePx))
+        container.addView(timerStack, LinearLayout.LayoutParams(sizePx, sizePx))
 
         ViewCompat.setOnApplyWindowInsetsListener(container) { _, insets ->
             onWindowInsetsChanged(insets)
@@ -204,31 +217,23 @@ object TimerOverlayManager {
 
         effectiveWm.addView(container, params)
         overlayContainer = container
+        overlayTimerStack = timerStack
         overlayView = overlay
+        overlayLabelView = label
         layoutParams = params
         ViewCompat.requestApplyInsets(container)
     }
 
     private fun updateOverlay(timerIndex: Int, timer: TimerInstance) {
         val params = layoutParams ?: return
+        val timerStack = overlayTimerStack ?: return
         val view = overlayView ?: return
+        val labelView = overlayLabelView ?: return
 
         if (touchListener == null || touchListenerTimerIndex != timerIndex) {
             touchListener = OverlayTouchListener(timerIndex)
             touchListenerTimerIndex = timerIndex
             view.setOnTouchListener(touchListener)
-        }
-
-        val sizePx = sizePx(latestState.overlaySize)
-        val panelPx = dp(PANEL_WIDTH_DP)
-        val targetWidth = if (isPanelOpen) sizePx + panelPx else sizePx
-        if (params.width != targetWidth || params.height != sizePx) {
-            params.width = targetWidth
-            params.height = sizePx
-            val timerLp = view.layoutParams as? LinearLayout.LayoutParams
-            if (timerLp == null || timerLp.width != sizePx) {
-                view.layoutParams = LinearLayout.LayoutParams(sizePx, sizePx)
-            }
         }
 
         val lockscreenEnabled = latestState.overlayShowOnLockscreen
@@ -246,6 +251,17 @@ object TimerOverlayManager {
         } else {
             timer
         }
+        val layoutSpec = buildLayoutSpec(timer, params)
+
+        applyTimerStackLayout(
+            timerStack = timerStack,
+            view = view,
+            labelView = labelView,
+            layoutSpec = layoutSpec,
+            timerName = timer.activeTimerName.trim(),
+        )
+        applyContainerChildOrder(layoutSpec)
+        applyWindowSize(params, layoutSpec)
 
         view.render(
             timer = displayTimer,
@@ -260,6 +276,186 @@ object TimerOverlayManager {
         updateOverlayLayout(params)
     }
 
+    private fun buildLayoutSpec(timer: TimerInstance, params: WindowManager.LayoutParams): OverlayLayoutSpec {
+        val timerSizePx = sizePx(latestState.overlaySize)
+        val panelWidthPx = if (isPanelOpen) dp(PANEL_WIDTH_DP) else 0
+        val labelText = timer.activeTimerName.trim()
+            .takeIf { !isPanelOpen && latestState.overlayShowTimerName && it.isNotBlank() }
+        val labelHeightPx = labelText?.let { collapsedLabelHeightPx(latestState.overlaySize) } ?: 0
+        val renderedLabelPosition = labelText?.let {
+            resolveRenderedLabelPosition(
+                preferredPosition = latestState.overlayTimerNamePosition,
+                params = params,
+                timerSizePx = timerSizePx,
+                labelHeightPx = labelHeightPx,
+            )
+        }
+        return OverlayLayoutSpec(
+            timerSizePx = timerSizePx,
+            panelWidthPx = panelWidthPx,
+            labelText = labelText,
+            renderedLabelPosition = renderedLabelPosition,
+            totalWidth = timerSizePx + panelWidthPx,
+            totalHeight = timerSizePx + labelHeightPx,
+        )
+    }
+
+    private fun resolveRenderedLabelPosition(
+        preferredPosition: OverlayLabelPosition,
+        params: WindowManager.LayoutParams,
+        timerSizePx: Int,
+        labelHeightPx: Int,
+    ): OverlayLabelPosition {
+        val metrics = appContext.resources.displayMetrics
+        val requiredClearancePx = labelHeightPx + dp(LABEL_EDGE_CLEARANCE_DP)
+        val hysteresisPx = dp(LABEL_EDGE_CLEARANCE_DP)
+        val timerTopPx = currentTimerTop(params, labelHeightPx)
+        val timerBottomPx = timerTopPx + timerSizePx
+        val topClearancePx = timerTopPx
+        val bottomClearancePx = metrics.heightPixels - timerBottomPx
+        val currentRenderedPosition = renderedCollapsedLabelPosition ?: preferredPosition
+
+        val resolvedPosition = when (preferredPosition) {
+            OverlayLabelPosition.Top -> {
+                if (currentRenderedPosition == OverlayLabelPosition.Bottom) {
+                    if (topClearancePx >= requiredClearancePx + hysteresisPx) {
+                        OverlayLabelPosition.Top
+                    } else {
+                        OverlayLabelPosition.Bottom
+                    }
+                } else {
+                    if (topClearancePx < requiredClearancePx) {
+                        OverlayLabelPosition.Bottom
+                    } else {
+                        OverlayLabelPosition.Top
+                    }
+                }
+            }
+            OverlayLabelPosition.Bottom -> {
+                if (currentRenderedPosition == OverlayLabelPosition.Top) {
+                    if (bottomClearancePx >= requiredClearancePx + hysteresisPx) {
+                        OverlayLabelPosition.Bottom
+                    } else {
+                        OverlayLabelPosition.Top
+                    }
+                } else {
+                    if (bottomClearancePx < requiredClearancePx) {
+                        OverlayLabelPosition.Top
+                    } else {
+                        OverlayLabelPosition.Bottom
+                    }
+                }
+            }
+        }
+        renderedCollapsedLabelPosition = resolvedPosition
+        return resolvedPosition
+    }
+
+    private fun currentTimerTop(params: WindowManager.LayoutParams, labelHeightPx: Int): Int {
+        return when (currentCollapsedLabelLayoutPosition()) {
+            OverlayLabelPosition.Top -> params.y + labelHeightPx
+            OverlayLabelPosition.Bottom,
+            null -> params.y
+        }
+    }
+
+    private fun currentCollapsedLabelLayoutPosition(): OverlayLabelPosition? {
+        val timerStack = overlayTimerStack ?: return null
+        val labelView = overlayLabelView ?: return null
+        if (labelView.visibility != View.VISIBLE || timerStack.childCount != 2) return null
+        return when {
+            timerStack.getChildAt(0) === labelView -> OverlayLabelPosition.Top
+            timerStack.getChildAt(1) === labelView -> OverlayLabelPosition.Bottom
+            else -> null
+        }
+    }
+
+    private fun applyTimerStackLayout(
+        timerStack: LinearLayout,
+        view: OverlayTimerView,
+        labelView: OverlayNameLabelView,
+        layoutSpec: OverlayLayoutSpec,
+        timerName: String,
+    ) {
+        val timerSizePx = layoutSpec.timerSizePx
+        val labelHeightPx = if (layoutSpec.labelText != null) collapsedLabelHeightPx(latestState.overlaySize) else 0
+        labelView.updateContent(
+            text = timerName,
+            overlaySize = latestState.overlaySize,
+            visible = layoutSpec.labelText != null,
+        )
+        view.layoutParams = LinearLayout.LayoutParams(timerSizePx, timerSizePx)
+        val needsRebuild = when (layoutSpec.renderedLabelPosition) {
+            OverlayLabelPosition.Top -> timerStack.childCount != 2 ||
+                timerStack.getChildAt(0) !== labelView ||
+                timerStack.getChildAt(1) !== view
+            OverlayLabelPosition.Bottom -> timerStack.childCount != 2 ||
+                timerStack.getChildAt(0) !== view ||
+                timerStack.getChildAt(1) !== labelView
+            null -> timerStack.childCount != 1 || timerStack.getChildAt(0) !== view
+        }
+        if (needsRebuild) {
+            timerStack.removeAllViews()
+            if (layoutSpec.renderedLabelPosition == OverlayLabelPosition.Top) {
+                timerStack.addView(labelView, LinearLayout.LayoutParams(timerSizePx, labelHeightPx))
+            }
+            timerStack.addView(view, LinearLayout.LayoutParams(timerSizePx, timerSizePx))
+            if (layoutSpec.renderedLabelPosition == OverlayLabelPosition.Bottom) {
+                timerStack.addView(labelView, LinearLayout.LayoutParams(timerSizePx, labelHeightPx))
+            }
+        } else if (layoutSpec.renderedLabelPosition != null) {
+            labelView.layoutParams = LinearLayout.LayoutParams(timerSizePx, labelHeightPx)
+        }
+        timerStack.layoutParams = LinearLayout.LayoutParams(timerSizePx, layoutSpec.totalHeight)
+    }
+
+    private fun applyContainerChildOrder(layoutSpec: OverlayLayoutSpec) {
+        val container = overlayContainer ?: return
+        val timerStack = overlayTimerStack ?: return
+        val panel = overlayPanel
+
+        if (isPanelOpen && panel != null) {
+            val panelLayoutParams = LinearLayout.LayoutParams(layoutSpec.panelWidthPx, layoutSpec.timerSizePx)
+            val desiredFirst = if (isSnappedLeft) timerStack else panel
+            val desiredSecond = if (isSnappedLeft) panel else timerStack
+            val needsRebuild = container.childCount != 2 ||
+                container.getChildAt(0) !== desiredFirst ||
+                container.getChildAt(1) !== desiredSecond
+            if (needsRebuild) {
+                container.removeAllViews()
+                if (isSnappedLeft) {
+                    container.addView(timerStack, LinearLayout.LayoutParams(layoutSpec.timerSizePx, layoutSpec.totalHeight))
+                    container.addView(panel, panelLayoutParams)
+                } else {
+                    container.addView(panel, panelLayoutParams)
+                    container.addView(timerStack, LinearLayout.LayoutParams(layoutSpec.timerSizePx, layoutSpec.totalHeight))
+                }
+            } else {
+                timerStack.layoutParams = LinearLayout.LayoutParams(layoutSpec.timerSizePx, layoutSpec.totalHeight)
+                panel.layoutParams = panelLayoutParams
+            }
+            panel.isPanelOnRight = isSnappedLeft
+            panel.invalidate()
+        } else {
+            val needsRebuild = container.childCount != 1 || container.getChildAt(0) !== timerStack
+            if (needsRebuild) {
+                container.removeAllViews()
+                container.addView(timerStack, LinearLayout.LayoutParams(layoutSpec.timerSizePx, layoutSpec.totalHeight))
+            } else {
+                timerStack.layoutParams = LinearLayout.LayoutParams(layoutSpec.timerSizePx, layoutSpec.totalHeight)
+            }
+        }
+    }
+
+    private fun applyWindowSize(params: WindowManager.LayoutParams, layoutSpec: OverlayLayoutSpec) {
+        if (params.width != layoutSpec.totalWidth) {
+            params.width = layoutSpec.totalWidth
+        }
+        if (params.height != layoutSpec.totalHeight) {
+            params.height = layoutSpec.totalHeight
+        }
+    }
+
     private fun removeOverlay() {
         val container = overlayContainer ?: return
         val wm = activeWindowManager ?: windowManager
@@ -268,13 +464,17 @@ object TimerOverlayManager {
         } catch (_: IllegalArgumentException) {
         }
         overlayContainer = null
+        overlayTimerStack = null
         overlayView = null
+        overlayLabelView = null
         overlayPanel = null
         isPanelOpen = false
+        panelCollapsedRestorePosition = null
         layoutParams = null
         activeWindowManager = null
         touchListener = null
         touchListenerTimerIndex = -1
+        renderedCollapsedLabelPosition = null
         longPressHandler.removeCallbacksAndMessages(null)
         clearImeTracking()
     }
@@ -300,6 +500,7 @@ object TimerOverlayManager {
             updatePanelSideInContainer(snapLeft)
         }
         isSnappedLeft = snapLeft
+        clearPanelCollapsedRestorePosition()
 
         updateOverlayLayout(params)
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
@@ -312,75 +513,73 @@ object TimerOverlayManager {
         if (isPanelOpen) closePanel() else openPanel(timerIndex)
     }
 
+    private fun clearPanelCollapsedRestorePosition() {
+        panelCollapsedRestorePosition = null
+    }
+
+    private fun collapsedSnappedX(): Int {
+        if (isSnappedLeft) return 0
+        val collapsedWidth = sizePx(latestState.overlaySize)
+        val metrics = appContext.resources.displayMetrics
+        return max(0, metrics.widthPixels - collapsedWidth)
+    }
+
     private fun openPanel(timerIndex: Int) {
         if (isPanelOpen) return
-        val container = overlayContainer ?: return
         val params = layoutParams ?: return
+        panelCollapsedRestorePosition = OverlayPosition(params.x, params.y)
 
         panelFocusedTimerIndex = timerIndex
-
-        val sizePx = sizePx(latestState.overlaySize)
-        val panelPx = dp(PANEL_WIDTH_DP)
 
         val panel = OverlayPanelView(appContext, isSnappedLeft)
         overlayPanel = panel
         isPanelOpen = true
 
-        val panelLp = LinearLayout.LayoutParams(panelPx, sizePx)
-        if (isSnappedLeft) {
-            container.addView(panel, panelLp)
-        } else {
-            container.addView(panel, 0, panelLp)
-            params.x = (params.x - panelPx).coerceAtLeast(0)
+        if (!isSnappedLeft) {
+            params.x -= dp(PANEL_WIDTH_DP)
         }
-
-        params.width = sizePx + panelPx
-
         updatePanelContent()
+        refreshCurrentOverlay()
         clampPosition(params)
         updateOverlayLayout(params)
     }
 
     private fun closePanel() {
         if (!isPanelOpen) return
-        val container = overlayContainer ?: return
-        val panel = overlayPanel ?: return
         val params = layoutParams ?: return
+        val restorePosition = panelCollapsedRestorePosition
 
-        val sizePx = sizePx(latestState.overlaySize)
-
-        container.removeView(panel)
         overlayPanel = null
         isPanelOpen = false
 
-        params.width = sizePx
-        if (!isSnappedLeft) {
-            val metrics = appContext.resources.displayMetrics
-            params.x = max(0, metrics.widthPixels - sizePx)
+        if (restorePosition != null) {
+            params.x = restorePosition.x
+            params.y = restorePosition.y
+            clearPanelCollapsedRestorePosition()
+        } else {
+            params.x = collapsedSnappedX()
         }
 
+        refreshCurrentOverlay()
         clampPosition(params)
         updateOverlayLayout(params)
     }
 
     private fun updatePanelSideInContainer(newSnappedLeft: Boolean) {
-        val container = overlayContainer ?: return
-        val view = overlayView ?: return
-        val panel = overlayPanel ?: return
+        isSnappedLeft = newSnappedLeft
+        refreshCurrentOverlay()
+    }
 
-        val sizePx = sizePx(latestState.overlaySize)
-        val panelPx = dp(PANEL_WIDTH_DP)
+    private fun refreshCurrentOverlay() {
+        val timerIndex = latestState.overlayTimerIndex ?: return
+        val timer = latestState.timers.getOrNull(timerIndex) ?: return
+        updateOverlay(timerIndex, timer)
+    }
 
-        container.removeAllViews()
-        if (newSnappedLeft) {
-            container.addView(view, LinearLayout.LayoutParams(sizePx, sizePx))
-            container.addView(panel, LinearLayout.LayoutParams(panelPx, sizePx))
-        } else {
-            container.addView(panel, LinearLayout.LayoutParams(panelPx, sizePx))
-            container.addView(view, LinearLayout.LayoutParams(sizePx, sizePx))
+    private fun onExpandedDragStarted() {
+        if (isPanelOpen) {
+            clearPanelCollapsedRestorePosition()
         }
-        panel.isPanelOnRight = newSnappedLeft
-        panel.invalidate()
     }
 
     private fun updatePanelContent() {
@@ -482,7 +681,7 @@ object TimerOverlayManager {
         imeBottomInset = nextImeBottomInset
         val params = layoutParams ?: return
         applyImeAvoidanceIfNeeded(params)
-        updateOverlayLayout(params)
+        refreshCurrentOverlay()
     }
 
     private fun applyImeAvoidanceIfNeeded(params: WindowManager.LayoutParams) {
@@ -510,7 +709,7 @@ object TimerOverlayManager {
         params.x = savedPosition.x
         params.y = savedPosition.y
         clampPosition(params)
-        updateOverlayLayout(params)
+        refreshCurrentOverlay()
     }
 
     private fun clearImeTracking() {
@@ -548,9 +747,62 @@ object TimerOverlayManager {
         if (imeBottomInset > 0) overlayMovedByUserWhileImeVisible = true
     }
 
+    private fun maybeSwapPanelDuringDrag(params: WindowManager.LayoutParams, dragDeltaX: Int) {
+        if (!isPanelOpen || dragDeltaX == 0) return
+        val panelWidthPx = dp(PANEL_WIDTH_DP)
+        val maxX = max(0, appContext.resources.displayMetrics.widthPixels - params.width)
+        when {
+            isSnappedLeft && dragDeltaX > 0 && params.x >= maxX -> {
+                isSnappedLeft = false
+                params.x -= panelWidthPx
+            }
+            !isSnappedLeft && dragDeltaX < 0 && params.x <= 0 -> {
+                isSnappedLeft = true
+                params.x += panelWidthPx
+            }
+        }
+    }
+
+    private fun collapsedLabelHeightPx(size: OverlaySize): Int {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = collapsedLabelTextSizePx(size)
+            isFakeBoldText = true
+        }
+        val fontMetrics = paint.fontMetrics
+        val textHeight = fontMetrics.descent - fontMetrics.ascent
+        return ceil(textHeight + (collapsedLabelVerticalPaddingPx(size) * 2f)).toInt()
+    }
+
+    private fun collapsedLabelTextSizePx(size: OverlaySize): Float = when (size) {
+        OverlaySize.Small -> dp(11).toFloat()
+        OverlaySize.Medium -> dp(13).toFloat()
+        OverlaySize.Large -> dp(15).toFloat()
+    }
+
+    private fun collapsedLabelHorizontalPaddingPx(size: OverlaySize): Int = when (size) {
+        OverlaySize.Small -> dp(6)
+        OverlaySize.Medium -> dp(8)
+        OverlaySize.Large -> dp(10)
+    }
+
+    private fun collapsedLabelVerticalPaddingPx(size: OverlaySize): Int = when (size) {
+        OverlaySize.Small -> dp(3)
+        OverlaySize.Medium -> dp(4)
+        OverlaySize.Large -> dp(5)
+    }
+
     private enum class PanelAction { PrevTimer, NextTimer, TogglePauseResume, ConfirmReset, OpenApp }
 
     private data class OverlayPosition(val x: Int, val y: Int)
+
+    private data class OverlayLayoutSpec(
+        val timerSizePx: Int,
+        val panelWidthPx: Int,
+        val labelText: String?,
+        val renderedLabelPosition: OverlayLabelPosition?,
+        val totalWidth: Int,
+        val totalHeight: Int,
+    )
 
     // ── Touch Listener ───────────────────────────────────────────────────────────
 
@@ -588,16 +840,18 @@ object TimerOverlayManager {
                     params.y += dy.toInt()
                     lastTouchX = event.rawX
                     lastTouchY = event.rawY
-                    TimerOverlayManager.clampPosition(params)
                     val totalDeltaX = params.x - initialX
                     val totalDeltaY = params.y - initialY
                     if (!dragStarted && hasExceededTouchSlop(totalDeltaX.toFloat(), totalDeltaY.toFloat())) {
                         dragStarted = true
                         TimerOverlayManager.longPressHandler.removeCallbacks(longPressRunnable)
                         TimerOverlayManager.markOverlayMovedByUserDuringIme()
+                        TimerOverlayManager.onExpandedDragStarted()
                     }
-                    TimerOverlayManager.applyImeAvoidanceIfNeeded(params)
-                    TimerOverlayManager.updateOverlayLayout(params)
+                    if (dragStarted) {
+                        TimerOverlayManager.maybeSwapPanelDuringDrag(params, dx.toInt())
+                    }
+                    TimerOverlayManager.refreshCurrentOverlay()
                     return true
                 }
 
@@ -878,6 +1132,56 @@ object TimerOverlayManager {
         }
 
         private fun diameterPx(): Float = min(width, height).toFloat()
+    }
+
+    private class OverlayNameLabelView(context: Context) : View(context) {
+        private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#CC000000")
+            style = Paint.Style.FILL
+        }
+        private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textAlign = Paint.Align.CENTER
+            isFakeBoldText = true
+        }
+        private val backgroundRect = RectF()
+
+        private var text: String = ""
+        private var overlaySize: OverlaySize = OverlaySize.Medium
+        private var isLabelVisible: Boolean = false
+
+        fun updateContent(text: String, overlaySize: OverlaySize, visible: Boolean) {
+            this.text = text
+            this.overlaySize = overlaySize
+            this.isLabelVisible = visible
+            visibility = if (visible) VISIBLE else GONE
+            invalidate()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            if (!isLabelVisible || text.isBlank()) return
+
+            val horizontalPadding = TimerOverlayManager.collapsedLabelHorizontalPaddingPx(overlaySize).toFloat()
+            val cornerRadius = height / 2f
+            backgroundRect.set(0f, 0f, width.toFloat(), height.toFloat())
+            canvas.drawRoundRect(backgroundRect, cornerRadius, cornerRadius, backgroundPaint)
+
+            textPaint.textSize = TimerOverlayManager.collapsedLabelTextSizePx(overlaySize)
+            val availableWidth = (width - horizontalPadding * 2f).coerceAtLeast(0f)
+            val displayText = truncate(text, availableWidth)
+            val baseline = height / 2f - ((textPaint.descent() + textPaint.ascent()) / 2f)
+            canvas.drawText(displayText, width / 2f, baseline, textPaint)
+        }
+
+        private fun truncate(value: String, maxWidth: Float): String {
+            if (textPaint.measureText(value) <= maxWidth) return value
+            var trimmed = value
+            while (trimmed.isNotEmpty() && textPaint.measureText("$trimmed…") > maxWidth) {
+                trimmed = trimmed.dropLast(1)
+            }
+            return if (trimmed.isEmpty()) "…" else "$trimmed…"
+        }
     }
 
     // ── Overlay Panel View ───────────────────────────────────────────────────────

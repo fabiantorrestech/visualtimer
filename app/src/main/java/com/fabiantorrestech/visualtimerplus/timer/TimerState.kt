@@ -15,6 +15,8 @@ enum class OverlaySize { Small, Medium, Large }
 
 enum class OverlayStyle { Ring, TimerFace }
 
+enum class OverlayLabelPosition { Top, Bottom }
+
 enum class FinishedVibrationMode(val durationMillis: Long?) {
     Off(0L),
     OneMinute(60_000L),

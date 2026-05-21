@@ -124,12 +124,14 @@ import com.fabiantorrestech.visualtimerplus.db.AppDatabase
 import com.fabiantorrestech.visualtimerplus.timer.AppState
 import com.fabiantorrestech.visualtimerplus.timer.CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS
 import com.fabiantorrestech.visualtimerplus.timer.withTimerIndex
+import com.fabiantorrestech.visualtimerplus.timer.findNextAvailableTimerSlot
 import com.fabiantorrestech.visualtimerplus.timer.CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS
 import com.fabiantorrestech.visualtimerplus.timer.CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS
 import com.fabiantorrestech.visualtimerplus.timer.ClockPosition
 import com.fabiantorrestech.visualtimerplus.timer.FinishedSoundRoute
 import com.fabiantorrestech.visualtimerplus.timer.FinishedVibrationMode
 import com.fabiantorrestech.visualtimerplus.timer.NotificationMode
+import com.fabiantorrestech.visualtimerplus.timer.OverlayLabelPosition
 import com.fabiantorrestech.visualtimerplus.timer.OverlaySize
 import com.fabiantorrestech.visualtimerplus.timer.OverlayStyle
 import com.fabiantorrestech.visualtimerplus.timer.ThemeMode
@@ -198,6 +200,15 @@ fun TimerScreen(
     // Tracks which activeTimerIndex was last set BY the pager, to prevent the reverse
     // sync from animating back when the user swipes faster than state propagates.
     var lastPagerSetActiveIndex by remember { mutableStateOf(appState.activeTimerIndex) }
+
+    fun handleAddTimer() {
+        val targetIndex = appState.findNextAvailableTimerSlot() ?: return
+        // Set this before dispatching so LaunchedEffect(activeTimerIndex) doesn't double-animate.
+        // Also ensures navigation happens even when activeTimerIndex doesn't change (reuse case).
+        lastPagerSetActiveIndex = targetIndex
+        onAction(TimerAction.AddTimer)
+        coroutineScope.launch { pagerState.animateScrollToPage(targetIndex) }
+    }
 
     var cleanModeUiAwake by rememberSaveable { mutableStateOf(false) }
     var cleanModeActivityTick by rememberSaveable { mutableStateOf(0) }
@@ -498,7 +509,7 @@ fun TimerScreen(
                     )
                 }
             } else {
-                AddTimerPage(onAdd = { onAction(TimerAction.AddTimer) })
+                AddTimerPage(onAdd = { handleAddTimer() })
             }
         }
 
@@ -535,7 +546,7 @@ fun TimerScreen(
                 }
                 if (appState.timers.size < 20) {
                     SmallFloatingActionButton(
-                        onClick = { onAction(TimerAction.AddTimer) },
+                        onClick = { handleAddTimer() },
                         shape = RoundedCornerShape(12.dp),
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1840,6 +1851,19 @@ private fun SettingsSheetContent(
                     checked = appState.overlayShowOnLockscreen,
                     onCheckedChange = { onAction(TimerAction.SetOverlayShowOnLockscreen(it)) },
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                PreferenceToggle(
+                    label = stringResource(R.string.overlay_show_timer_name),
+                    checked = appState.overlayShowTimerName,
+                    onCheckedChange = { onAction(TimerAction.SetOverlayShowTimerName(it)) },
+                )
+                if (appState.overlayShowTimerName) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OverlayLabelPositionSelector(
+                        selectedPosition = appState.overlayTimerNamePosition,
+                        onPositionSelected = { onAction(TimerAction.SetOverlayTimerNamePosition(it)) },
+                    )
+                }
                 if (appState.overlayShowOnLockscreen && !accessibilityServiceConnected) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -2898,6 +2922,32 @@ private fun OverlayStyleSelector(selectedStyle: OverlayStyle, onStyleSelected: (
                 label = stringResource(R.string.overlay_style_timer_face),
                 selected = selectedStyle == OverlayStyle.TimerFace,
                 onClick = { onStyleSelected(OverlayStyle.TimerFace) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun OverlayLabelPositionSelector(
+    selectedPosition: OverlayLabelPosition,
+    onPositionSelected: (OverlayLabelPosition) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.overlay_timer_name_position),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SelectorChip(
+                label = stringResource(R.string.overlay_timer_name_position_top),
+                selected = selectedPosition == OverlayLabelPosition.Top,
+                onClick = { onPositionSelected(OverlayLabelPosition.Top) },
+            )
+            SelectorChip(
+                label = stringResource(R.string.overlay_timer_name_position_bottom),
+                selected = selectedPosition == OverlayLabelPosition.Bottom,
+                onClick = { onPositionSelected(OverlayLabelPosition.Bottom) },
             )
         }
     }
