@@ -144,6 +144,7 @@ import com.fabiantorrestech.visualtimerplus.ui.component.QuickAdjustRow
 import com.fabiantorrestech.visualtimerplus.ui.component.TimerControls
 import com.fabiantorrestech.visualtimerplus.ui.component.VisualTimerCanvas
 import com.fabiantorrestech.visualtimerplus.util.formatClockTime
+import com.fabiantorrestech.visualtimerplus.util.formatWallClockEndTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -3122,8 +3123,6 @@ private fun EndTimeText(
     durationOverrideMillis: Long? = null,
     modifier: Modifier = Modifier,
 ) {
-    val formatter = rememberClockFormatter(if (showSeconds) "h:mm:ss a" else "h:mm a")
-
     // Ticks once per second so end time stays live (both as clock advances and as duration changes during drag)
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -3143,10 +3142,7 @@ private fun EndTimeText(
 
     // Re-derive the formatted string only when the visible minute (or second) boundary changes
     val endText = remember(endMillis / (if (showSeconds) 1_000L else 60_000L), showSeconds) {
-        val time = java.time.Instant.ofEpochMilli(endMillis)
-            .atZone(java.time.ZoneId.systemDefault())
-            .toLocalTime()
-        time.format(formatter)
+        formatWallClockEndTime(endMillis, showSeconds)
     }
 
     Text(

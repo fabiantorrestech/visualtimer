@@ -50,3 +50,40 @@ fun snapDuration(durationMillis: Long): Long {
 
 fun clampCleanModeAutoDismissSeconds(seconds: Int): Int =
     seconds.coerceIn(CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS, CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS)
+
+fun AppState.createBlankTimer(id: Int): TimerInstance {
+    val resetDuration = defaultDurationMillis.takeIf { it > 0L } ?: 0L
+    return TimerInstance(
+        id = id,
+        status = TimerStatus.Idle,
+        selectedDurationMillis = resetDuration,
+        remainingMillis = resetDuration,
+        defaultDurationMillis = defaultDurationMillis,
+        settings = defaultTimerSettings,
+    )
+}
+
+fun AppState.isReusableEmptyTimer(timer: TimerInstance): Boolean {
+    val resetDuration = defaultDurationMillis.takeIf { it > 0L } ?: 0L
+    return timer.status == TimerStatus.Idle &&
+        timer.activeTimerName.isBlank() &&
+        timer.activePresetId == null &&
+        timer.defaultDurationMillis == defaultDurationMillis &&
+        timer.settings == defaultTimerSettings &&
+        timer.selectedDurationMillis == resetDuration &&
+        timer.remainingMillis == resetDuration &&
+        timer.targetEndTimeMillis == null &&
+        timer.pausedRemainingMillis == null &&
+        timer.originalDurationMillis == 0L &&
+        timer.activeLogEntryId == -1L &&
+        timer.scheduleId == null &&
+        timer.totalAdjustmentMillis == 0L &&
+        timer.timeToDismissAccumulatedMillis == 0L &&
+        timer.overtimeStartedAtMillis == null
+}
+
+fun AppState.findReusableEmptyTimerIndex(): Int? =
+    timers.indexOfFirst(::isReusableEmptyTimer).takeIf { it >= 0 }
+
+fun AppState.findNextAvailableTimerSlot(): Int? =
+    findReusableEmptyTimerIndex() ?: timers.size.takeIf { it < MAX_TIMERS }

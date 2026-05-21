@@ -58,11 +58,15 @@ fun DurationPickerSheet(
     initialMillis: Long,
     onDurationSet: (Long) -> Unit,
     onDismiss: () -> Unit,
+    onPreviewDurationChanged: ((Long?) -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            onPreviewDurationChanged?.invoke(null)
+            onDismiss()
+        },
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.background,
     ) {
@@ -73,6 +77,7 @@ fun DurationPickerSheet(
                 onDismiss()
             },
             onDismiss = onDismiss,
+            onPreviewDurationChanged = onPreviewDurationChanged,
         )
     }
 }
@@ -82,6 +87,7 @@ fun DurationPickerContent(
     initialMillis: Long,
     onDurationSet: (Long) -> Unit,
     onDismiss: () -> Unit,
+    onPreviewDurationChanged: ((Long?) -> Unit)? = null,
 ) {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var selectedTab by remember { mutableStateOf(0) }
@@ -108,12 +114,20 @@ fun DurationPickerContent(
                 initialMillis = initialMillis,
                 isLandscape = isLandscape,
                 onDurationSet = onDurationSet,
-                onDismiss = onDismiss,
+                onDismiss = {
+                    onPreviewDurationChanged?.invoke(null)
+                    onDismiss()
+                },
+                onPreviewDurationChanged = onPreviewDurationChanged,
             )
             1 -> EndTimeTabContent(
                 isLandscape = isLandscape,
                 onDurationSet = onDurationSet,
-                onDismiss = onDismiss,
+                onDismiss = {
+                    onPreviewDurationChanged?.invoke(null)
+                    onDismiss()
+                },
+                onPreviewDurationChanged = onPreviewDurationChanged,
             )
         }
     }
@@ -135,6 +149,7 @@ private fun DurationTabContent(
     isLandscape: Boolean,
     onDurationSet: (Long) -> Unit,
     onDismiss: () -> Unit,
+    onPreviewDurationChanged: ((Long?) -> Unit)? = null,
 ) {
     val initialSeconds = (initialMillis / 1000L).coerceAtLeast(0L)
     val initHH = (initialSeconds / 3600L).coerceAtMost(99L)
@@ -161,6 +176,10 @@ private fun DurationTabContent(
         val mm = fieldVal(mmDigits)
         val ss = fieldVal(ssDigits)
         return mm < 60L && ss < 60L && currentMillis() > 0L
+    }
+
+    LaunchedEffect(hhDigits, mmDigits, ssDigits) {
+        onPreviewDurationChanged?.invoke(currentMillis().takeIf { isValid() })
     }
 
     fun onKey(key: String) {
@@ -399,6 +418,7 @@ private fun EndTimeTabContent(
     isLandscape: Boolean,
     onDurationSet: (Long) -> Unit,
     onDismiss: () -> Unit,
+    onPreviewDurationChanged: ((Long?) -> Unit)? = null,
 ) {
     val initTime = remember {
         LocalTime.now().plusHours(1).let { t -> LocalTime.of(t.hour, (t.minute / 5) * 5) }
@@ -430,6 +450,10 @@ private fun EndTimeTabContent(
 
     fun resultMillis(): Long? = computeEndTimeMillis(combinedDigits(), isAm, selectedOffset)
     fun isValid(): Boolean = resultMillis() != null
+
+    LaunchedEffect(hhDigits, mmDigits, isAm, selectedOffset) {
+        onPreviewDurationChanged?.invoke(resultMillis())
+    }
 
     fun onKey(key: String) {
         when (selectedField) {

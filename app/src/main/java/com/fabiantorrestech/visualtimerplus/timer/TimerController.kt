@@ -41,17 +41,17 @@ class TimerController(context: Context) {
             // ── Multi-timer management ─────────────────────────────────────────
             TimerAction.AddTimer -> {
                 val current = TimerRepository.getState()
-                if (current.timers.size >= MAX_TIMERS) return
-                val newId = current.timers.size
-                val newTimer = TimerInstance(
-                    id = newId,
-                    settings = current.defaultTimerSettings,
-                    defaultDurationMillis = current.defaultDurationMillis,
-                    selectedDurationMillis = current.defaultDurationMillis,
-                    remainingMillis = current.defaultDurationMillis,
-                )
+                val targetIndex = current.findNextAvailableTimerSlot() ?: return
+                val reusableIndex = current.findReusableEmptyTimerIndex()
                 TimerRepository.update { state ->
-                    state.copy(timers = state.timers + newTimer, activeTimerIndex = newId)
+                    if (reusableIndex == targetIndex) {
+                        state.copy(activeTimerIndex = targetIndex)
+                    } else {
+                        state.copy(
+                            timers = state.timers + state.createBlankTimer(id = targetIndex),
+                            activeTimerIndex = targetIndex,
+                        )
+                    }
                 }
                 syncNotification()
             }
@@ -77,7 +77,7 @@ class TimerController(context: Context) {
                     val reindexed = updated.mapIndexed { i, t -> t.copy(id = i) }
                     val newActive = state.activeTimerIndex.coerceAtMost((reindexed.size - 1).coerceAtLeast(0))
                     state.copy(
-                        timers = reindexed.ifEmpty { listOf(TimerInstance(id = 0, settings = state.defaultTimerSettings)) },
+                        timers = reindexed.ifEmpty { listOf(state.createBlankTimer(id = 0)) },
                         activeTimerIndex = newActive,
                     )
                 }
@@ -99,7 +99,7 @@ class TimerController(context: Context) {
                 }
                 TimerRepository.update { state ->
                     state.copy(
-                        timers = listOf(TimerInstance(id = 0, settings = state.defaultTimerSettings)),
+                        timers = listOf(state.createBlankTimer(id = 0)),
                         activeTimerIndex = 0,
                     )
                 }
@@ -118,7 +118,7 @@ class TimerController(context: Context) {
                         .filter { it.status == TimerStatus.Running }
                         .mapIndexed { i, t -> t.copy(id = i) }
                     state.copy(
-                        timers = kept.ifEmpty { listOf(TimerInstance(id = 0, settings = state.defaultTimerSettings)) },
+                        timers = kept.ifEmpty { listOf(state.createBlankTimer(id = 0)) },
                         activeTimerIndex = 0,
                     )
                 }

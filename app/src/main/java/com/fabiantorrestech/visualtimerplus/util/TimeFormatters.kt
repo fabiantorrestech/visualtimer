@@ -1,5 +1,8 @@
 package com.fabiantorrestech.visualtimerplus.util
 
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 fun Long.formatClockTime(): String {
@@ -15,3 +18,18 @@ fun Long.formatClockTime(): String {
         String.format(Locale.getDefault(), "%02d:%02d", totalMinutes, seconds)
     }
 }
+
+fun formatWallClockEndTime(endTimeMillis: Long, showSeconds: Boolean = false): String {
+    val pattern = if (showSeconds) "h:mm:ss a" else "h:mm a"
+    val formatter = DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+    return Instant.ofEpochMilli(endTimeMillis)
+        .atZone(ZoneId.systemDefault())
+        .toLocalTime()
+        .format(formatter)
+}
+
+fun formatEndTimeFromNow(
+    durationMillis: Long,
+    showSeconds: Boolean = false,
+    nowMillis: Long = System.currentTimeMillis(),
+): String = formatWallClockEndTime(nowMillis + durationMillis, showSeconds)

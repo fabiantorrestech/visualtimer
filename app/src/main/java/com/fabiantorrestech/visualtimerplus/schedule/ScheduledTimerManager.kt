@@ -19,6 +19,7 @@ import com.fabiantorrestech.visualtimerplus.timer.MAX_DURATION_MILLIS
 import com.fabiantorrestech.visualtimerplus.timer.MAX_TIMERS
 import com.fabiantorrestech.visualtimerplus.timer.TimerRepository
 import com.fabiantorrestech.visualtimerplus.timer.TimerStatus
+import com.fabiantorrestech.visualtimerplus.timer.findNextAvailableTimerSlot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -226,7 +227,7 @@ object ScheduledTimerManager {
     }
 
     fun hasLaunchCapacity(state: com.fabiantorrestech.visualtimerplus.timer.AppState): Boolean =
-        state.timers.size < MAX_TIMERS || state.timers.any { it.status == TimerStatus.Idle }
+        state.findNextAvailableTimerSlot() != null
 
     fun weekdaySummary(mask: Int): String {
         val days = DayOfWeek.entries.filter { mask.containsWeekday(it) }

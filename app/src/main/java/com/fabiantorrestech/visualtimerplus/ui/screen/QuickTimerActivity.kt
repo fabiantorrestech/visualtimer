@@ -72,10 +72,13 @@ import com.fabiantorrestech.visualtimerplus.timer.ThemeMode
 import com.fabiantorrestech.visualtimerplus.timer.TimerAction
 import com.fabiantorrestech.visualtimerplus.timer.TimerController
 import com.fabiantorrestech.visualtimerplus.timer.TimerRepository
+import com.fabiantorrestech.visualtimerplus.timer.findNextAvailableTimerSlot
 import com.fabiantorrestech.visualtimerplus.ui.component.DurationPickerSheet
 import com.fabiantorrestech.visualtimerplus.ui.component.QuickTimerDial
 import com.fabiantorrestech.visualtimerplus.ui.theme.VisualTimerPlusTheme
+import com.fabiantorrestech.visualtimerplus.util.formatEndTimeFromNow
 import com.fabiantorrestech.visualtimerplus.util.formatClockTime
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -130,10 +133,12 @@ class QuickTimerActivity : ComponentActivity() {
 
     private fun launchTimer(durationMillis: Long, presetId: Long?, name: String) {
         val state = TimerRepository.state.value
-        if (state.timers.size >= MAX_TIMERS) return
+        val targetIndex = state.findNextAvailableTimerSlot() ?: return
 
         controller.dispatch(TimerAction.AddTimer)
-        val newIndex = TimerRepository.state.value.timers.size - 1
+        val updatedState = TimerRepository.state.value
+        val newIndex = updatedState.activeTimerIndex
+        if (newIndex != targetIndex || newIndex !in updatedState.timers.indices) return
 
         if (name.isNotBlank()) controller.dispatch(TimerAction.SetActiveTimerName(name, newIndex))
         if (presetId != null) controller.dispatch(TimerAction.SetActivePresetId(presetId, newIndex))
@@ -173,6 +178,7 @@ private fun QuickTimerPopup(
     var timerName by remember { mutableStateOf("") }
     var selectedTab by remember { mutableIntStateOf(1) }
     var customDuration by remember { mutableLongStateOf(0L) }
+    var pickerPreviewDuration by remember { mutableStateOf<Long?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var presets by remember { mutableStateOf<List<PresetEntity>>(emptyList()) }
 
@@ -187,7 +193,7 @@ private fun QuickTimerPopup(
     }
 
     fun attemptStart(durationMillis: Long, presetId: Long?, name: String) {
-        if (TimerRepository.state.value.timers.size >= MAX_TIMERS) {
+        if (TimerRepository.state.value.findNextAvailableTimerSlot() == null) {
             errorMessage = maxTimersError
             return
         }
@@ -307,9 +313,12 @@ private fun QuickTimerPopup(
                         )
                         1 -> QuickDialTabContent(
                             customDuration = customDuration,
+                            previewDuration = pickerPreviewDuration,
                             onDurationChanged = { customDuration = it },
+                            onPreviewDurationChanged = { pickerPreviewDuration = it },
                             onStart = { attemptStart(customDuration, null, timerName) },
                             clockwiseModeEnabled = appState.defaultTimerSettings.clockwiseModeEnabled,
+                            showEndTimeSecondsEnabled = appState.defaultTimerSettings.showEndTimeSecondsEnabled,
                             isOledMode = appState.isOledMode,
                         )
                     }
@@ -383,12 +392,16 @@ private fun PresetsTabContent(
 @Composable
 private fun QuickDialTabContent(
     customDuration: Long,
+    previewDuration: Long?,
     onDurationChanged: (Long) -> Unit,
+    onPreviewDurationChanged: (Long?) -> Unit,
     onStart: () -> Unit,
     clockwiseModeEnabled: Boolean,
+    showEndTimeSecondsEnabled: Boolean,
     isOledMode: Boolean = false,
 ) {
     var showPicker by remember { mutableStateOf(false) }
+    val displayDuration = previewDuration ?: customDuration
 
     Column(
         modifier = Modifier
@@ -407,16 +420,28 @@ private fun QuickDialTabContent(
                     .weight(1f)
                     .fillMaxSize(),
             ) {
-                Text(
-                    text = if (customDuration == 0L) "--:--" else customDuration.formatClockTime(),
-                    style = MaterialTheme.typography.displaySmall,
-                    color = if (customDuration == 0L)
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    else
-                        MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
+                Column(
                     modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 )
+                {
+                    Text(
+                        text = if (displayDuration == 0L) "--:--" else displayDuration.formatClockTime(),
+                        style = MaterialTheme.typography.displaySmall,
+                        color = if (displayDuration == 0L)
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        else
+                            MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                    )
+                    if (displayDuration > 0L) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        QuickTimerEndTimeText(
+                            durationMillis = displayDuration,
+                            showSeconds = showEndTimeSecondsEnabled,
+                        )
+                    }
+                }
                 OutlinedButton(
                     onClick = { showPicker = true },
                     modifier = Modifier
@@ -460,9 +485,46 @@ private fun QuickDialTabContent(
             initialMillis = customDuration,
             onDurationSet = { millis ->
                 onDurationChanged(millis)
+                onPreviewDurationChanged(null)
                 showPicker = false
             },
-            onDismiss = { showPicker = false },
+            onDismiss = {
+                onPreviewDurationChanged(null)
+                showPicker = false
+            },
+            onPreviewDurationChanged = onPreviewDurationChanged,
         )
     }
+}
+
+@Composable
+private fun QuickTimerEndTimeText(
+    durationMillis: Long,
+    showSeconds: Boolean,
+) {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+
+    LaunchedEffect(showSeconds) {
+        while (true) {
+            val currentTime = System.currentTimeMillis()
+            val interval = if (showSeconds) 1_000L else 60_000L
+            delay(interval - (currentTime % interval))
+            now = System.currentTimeMillis()
+        }
+    }
+
+    val endTimeText = remember(durationMillis, now / if (showSeconds) 1_000L else 60_000L, showSeconds) {
+        formatEndTimeFromNow(
+            durationMillis = durationMillis,
+            showSeconds = showSeconds,
+            nowMillis = now,
+        )
+    }
+
+    Text(
+        text = endTimeText,
+        style = MaterialTheme.typography.bodyMedium,
+        color = Color(0xFFF59E0B),
+        textAlign = TextAlign.Center,
+    )
 }

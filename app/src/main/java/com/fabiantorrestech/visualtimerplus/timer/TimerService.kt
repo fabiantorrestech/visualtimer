@@ -296,7 +296,61 @@ class TimerService : Service() {
 
     private fun dismissFinished(index: Int) {
         if (TimerRepository.getTimer(index).status !in setOf(TimerStatus.Finished, TimerStatus.Overtime)) return
-        resetTimer(index)
+        removeFinishedTimer(index)
+    }
+
+    private fun removeFinishedTimer(index: Int) {
+        val state = TimerRepository.getState()
+        if (index !in state.timers.indices) return
+
+        val timer = state.timers[index]
+        if (timer.status !in setOf(TimerStatus.Finished, TimerStatus.Overtime)) return
+
+        completeLogEntry(index)
+        val scheduleId = timer.scheduleId
+        val wasAlerted = lastAlertedTimerIndex == index
+        if (wasAlerted) {
+            stopFinishedAlertEffects()
+            lastAlertedTimerIndex = -1
+        } else if (lastAlertedTimerIndex > index) {
+            lastAlertedTimerIndex -= 1
+        }
+
+        TimerRepository.update { current ->
+            if (index !in current.timers.indices) return@update current
+
+            val updated = current.timers.toMutableList()
+            updated.removeAt(index)
+            val reindexed = updated.mapIndexed { newIndex, existing -> existing.copy(id = newIndex) }
+            val remainingTimers = reindexed.ifEmpty { listOf(current.createBlankTimer(id = 0)) }
+            val nextActiveIndex = when {
+                reindexed.isEmpty() -> 0
+                index < reindexed.size -> index
+                else -> reindexed.lastIndex
+            }
+
+            current.copy(
+                timers = remainingTimers,
+                activeTimerIndex = nextActiveIndex,
+            )
+        }
+
+        ScheduledTimerManager.handleTimerLifecycleExitAsync(applicationContext, scheduleId)
+
+        val updatedState = TimerRepository.getState()
+        val anyActive = updatedState.timers.any {
+            it.status == TimerStatus.Running ||
+                it.status == TimerStatus.Paused ||
+                it.status == TimerStatus.Overtime ||
+                it.status == TimerStatus.Finished
+        }
+        if (!anyActive) {
+            notificationManager.cancelNotification()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        } else {
+            notificationManager.updateNotification(updatedState)
+        }
     }
 
     private fun enterOvertime(index: Int, now: Long = System.currentTimeMillis()) {
@@ -406,9 +460,9 @@ class TimerService : Service() {
         val scheduleId = intent.getLongExtra(ScheduledTimerManager.EXTRA_SCHEDULE_ID, -1L)
         val timerName = intent.getStringExtra(ScheduledTimerManager.EXTRA_SCHEDULED_TIMER_NAME).orEmpty()
         val state = TimerRepository.getState()
-        if (durationMillis <= 0L || !ScheduledTimerManager.hasLaunchCapacity(state)) return
+        val targetIndex = state.findNextAvailableTimerSlot() ?: return
+        if (durationMillis <= 0L) return
 
-        val targetIndex = state.timers.indexOfFirst { it.status == TimerStatus.Idle }.takeIf { it >= 0 } ?: state.timers.size
         val newTimer = TimerInstance(
             id = targetIndex,
             status = TimerStatus.Idle,
@@ -421,17 +475,22 @@ class TimerService : Service() {
             settings = state.defaultTimerSettings,
             scheduleId = scheduleId.takeIf { it >= 0L },
         )
+        var assignedSlot = false
         TimerRepository.update { current ->
-            if (!ScheduledTimerManager.hasLaunchCapacity(current)) {
+            val availableIndex = current.findNextAvailableTimerSlot()
+            if (availableIndex == null || availableIndex != targetIndex) {
                 current
             } else if (targetIndex < current.timers.size) {
                 val updated = current.timers.toMutableList()
                 updated[targetIndex] = newTimer
+                assignedSlot = true
                 current.copy(timers = updated)
             } else {
+                assignedSlot = true
                 current.copy(timers = current.timers + newTimer)
             }
         }
+        if (!assignedSlot) return
         createLogEntry(
             timerIndex = targetIndex,
             durationMillis = durationMillis,
