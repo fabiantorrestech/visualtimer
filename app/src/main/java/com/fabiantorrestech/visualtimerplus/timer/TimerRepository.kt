@@ -287,7 +287,7 @@ object TimerRepository {
             ignoreSilentMode = preferences.getBoolean("$prefix$K_IGNORE_SILENT_MODE", false),
             fullClockMode = preferences.getBoolean("$prefix$K_FULL_CLOCK_MODE", false),
             finishedVibrationMode = finishedVibrationMode,
-            keepScreenAwake = preferences.getBoolean("$prefix$K_KEEP_SCREEN_AWAKE", false),
+            keepScreenAwake = preferences.getBoolean("$prefix$K_KEEP_SCREEN_AWAKE", true),
             showCurrentTimeEnabled = preferences.getBoolean("$prefix$K_SHOW_CURRENT_TIME", false),
             showClockSecondsEnabled = preferences.getBoolean("$prefix$K_SHOW_CLOCK_SECONDS", false),
             clockPosition = clockPosition,

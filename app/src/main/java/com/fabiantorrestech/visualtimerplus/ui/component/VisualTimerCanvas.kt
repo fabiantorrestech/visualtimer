@@ -255,14 +255,23 @@ fun VisualTimerCanvas(
                 style = Stroke(width = diameter * 0.01f),
             )
 
-            // 12 o'clock divider line: always visible, anchors the start position visually.
-            drawLine(
-                color = colorScheme.outline.copy(alpha = if (isOledMode) 0.40f else 0.30f),
-                start = Offset(center.x, center.y - radius),
-                end = Offset(center.x, center.y - diameter * 0.026f),
-                strokeWidth = diameter * 0.008f,
-                cap = StrokeCap.Round,
-            )
+            // Tick marks: 60 evenly-spaced positions around the rim, thicker at quarter-points.
+            for (i in 0 until 60) {
+                val isQuarter = i % 15 == 0
+                val tickLength = if (isQuarter) diameter * 0.045f else diameter * 0.022f
+                val tickStroke = if (isQuarter) diameter * 0.009f else diameter * 0.004f
+                val tickAlpha = if (isOledMode) (if (isQuarter) 0.55f else 0.38f) else (if (isQuarter) 0.50f else 0.30f)
+                val angleRad = Math.toRadians(-90.0 + i * 6.0).toFloat()
+                val cosA = cos(angleRad)
+                val sinA = sin(angleRad)
+                drawLine(
+                    color = colorScheme.outline.copy(alpha = tickAlpha),
+                    start = Offset(center.x + radius * cosA, center.y + radius * sinA),
+                    end = Offset(center.x + (radius - tickLength) * cosA, center.y + (radius - tickLength) * sinA),
+                    strokeWidth = tickStroke,
+                    cap = StrokeCap.Round,
+                )
+            }
 
             // Direction indicator: curved arrow from 12 o'clock sweeping 90° toward 3 (CW) or 9 (CCW).
             // Only shown when the user can interact (idle/paused) and the setting is on.

@@ -33,3 +33,17 @@ fun formatEndTimeFromNow(
     showSeconds: Boolean = false,
     nowMillis: Long = System.currentTimeMillis(),
 ): String = formatWallClockEndTime(nowMillis + durationMillis, showSeconds)
+
+// Floors remaining time to the nearest 30-second boundary for display while running.
+// Below 30 s, shows exact seconds. Returns a string prefixed with "~".
+fun Long.formatApproxTime(): String {
+    val totalSeconds = (this / 1000L).coerceAtLeast(0L)
+    return if (totalSeconds >= 30L) {
+        val flooredSeconds = (totalSeconds / 30L) * 30L
+        val mins = flooredSeconds / 60L
+        val secs = flooredSeconds % 60L
+        "~%02d:%02d".format(mins, secs)
+    } else {
+        "%02d:%02d".format(0L, totalSeconds)
+    }
+}

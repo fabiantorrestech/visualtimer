@@ -24,7 +24,7 @@ data class TimerSettings(
     val timerTitleTextSizeSp: Float = 16f,
     val centerTimeSizeSp: Float = 36f,
     val promptBeforeStart: Boolean = false,
-    val keepScreenAwake: Boolean = false,
+    val keepScreenAwake: Boolean = true,
     val showEndTimeEnabled: Boolean = false,
     val showEndTimeSecondsEnabled: Boolean = false,
     val endTimeSizeSp: Float = 32f,
