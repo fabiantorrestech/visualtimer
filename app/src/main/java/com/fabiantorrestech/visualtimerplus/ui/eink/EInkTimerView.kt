@@ -11,7 +11,10 @@ import android.util.AttributeSet
 import android.view.View
 import com.fabiantorrestech.visualtimerplus.timer.TimerInstance
 import com.fabiantorrestech.visualtimerplus.timer.TimerStatus
+import com.fabiantorrestech.visualtimerplus.util.formatApproxTime
 import com.fabiantorrestech.visualtimerplus.util.formatClockTime
+import kotlin.math.cos
+import kotlin.math.sin
 
 class EInkTimerView @JvmOverloads constructor(
     context: Context,
@@ -28,6 +31,10 @@ class EInkTimerView @JvmOverloads constructor(
     private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.BUTT
+    }
+    private val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
     }
     private val ringOval = RectF()
 
@@ -58,6 +65,7 @@ class EInkTimerView @JvmOverloads constructor(
 
     fun update(timer: TimerInstance) {
         timeText = when (timer.status) {
+            TimerStatus.Running -> timer.displayMillis.formatApproxTime()
             TimerStatus.Overtime -> "+${timer.displayMillis.formatClockTime()}"
             else -> timer.displayMillis.formatClockTime()
         }
@@ -110,7 +118,8 @@ class EInkTimerView @JvmOverloads constructor(
             canvas.drawText("!!", w / 2f, h * 0.20f, textPaint)
         }
 
-        val timeTextSize = (w * 0.20f).coerceAtMost(h * 0.30f)
+        val baseTimeTextSize = (w * 0.20f).coerceAtMost(h * 0.30f)
+        val timeTextSize = if (timeText.count { it == ':' } >= 2) baseTimeTextSize * 0.9f else baseTimeTextSize
         textPaint.textSize = timeTextSize
         val timeCenterY = h * 0.38f
         val timeBaseline = timeCenterY - (textPaint.descent() + textPaint.ascent()) / 2f
@@ -165,10 +174,31 @@ class EInkTimerView @JvmOverloads constructor(
 
         // Thin outline for outer and inner ring border
         arcPaint.strokeWidth = 2f
+        ringOval.set(
+            centerX - ringRadius, centerY - ringRadius,
+            centerX + ringRadius, centerY + ringRadius,
+        )
         canvas.drawArc(ringOval, 0f, 360f, false, arcPaint)
         val innerR = ringRadius - ringStroke / 2f
         ringOval.set(centerX - innerR, centerY - innerR, centerX + innerR, centerY + innerR)
         canvas.drawArc(ringOval, 0f, 360f, false, arcPaint)
+
+        // 60 tick marks at the outer rim (thicker at quarter-points)
+        val outerR = ringRadius + ringStroke / 2f
+        tickPaint.color = fg
+        for (i in 0 until 60) {
+            val isQuarter = i % 15 == 0
+            val tickLen = if (isQuarter) ringRadius * 0.10f else ringRadius * 0.05f
+            tickPaint.strokeWidth = if (isQuarter) 3f else 1.5f
+            val angleRad = Math.toRadians(-90.0 + i * 6.0)
+            val cosA = cos(angleRad).toFloat()
+            val sinA = sin(angleRad).toFloat()
+            canvas.drawLine(
+                centerX + outerR * cosA, centerY + outerR * sinA,
+                centerX + (outerR + tickLen) * cosA, centerY + (outerR + tickLen) * sinA,
+                tickPaint,
+            )
+        }
 
         textPaint.color = fg
 
@@ -177,7 +207,8 @@ class EInkTimerView @JvmOverloads constructor(
             textPaint.textSize = exclSize
             canvas.drawText("!!", centerX, centerY - ringRadius * 0.20f, textPaint)
         } else {
-            val timeTextSize = (ringRadius * 0.60f).coerceAtMost(h * 0.18f)
+            val baseTimeSize = (ringRadius * 0.60f).coerceAtMost(h * 0.18f)
+            val timeTextSize = if (timeText.count { it == ':' } >= 2) baseTimeSize * 0.9f else baseTimeSize
             textPaint.textSize = timeTextSize
             val timeBaseline = centerY - (textPaint.descent() + textPaint.ascent()) / 2f
             canvas.drawText(timeText, centerX, timeBaseline, textPaint)

@@ -2,10 +2,12 @@ package com.fabiantorrestech.visualtimerplus.ui.eink
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import com.fabiantorrestech.visualtimerplus.R
 import com.fabiantorrestech.visualtimerplus.timer.MAX_DURATION_MILLIS
+import com.fabiantorrestech.visualtimerplus.util.formatEndTimeFromNow
 import java.util.Locale
 
 class EInkSetTimeActivity : ComponentActivity() {
@@ -14,6 +16,7 @@ class EInkSetTimeActivity : ComponentActivity() {
     private var minutes: Int = 0
     private var seconds: Int = 0
     private lateinit var timeDisplay: TextView
+    private lateinit var endsAtText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,6 +29,7 @@ class EInkSetTimeActivity : ComponentActivity() {
         seconds = (totalSeconds % 60L).toInt()
 
         timeDisplay = findViewById(R.id.timeDisplay)
+        endsAtText = findViewById(R.id.endsAtText)
         updateDisplay()
 
         findViewById<TextView>(R.id.backButton).setOnClickListener { finish() }
@@ -88,6 +92,13 @@ class EInkSetTimeActivity : ComponentActivity() {
             String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, seconds)
         } else {
             String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
+        }
+        val durationMs = (hours * 3600L + minutes * 60L + seconds) * 1000L
+        if (durationMs > 0L) {
+            endsAtText.visibility = View.VISIBLE
+            endsAtText.text = "ENDS AT ${formatEndTimeFromNow(durationMs, showSeconds = true)}"
+        } else {
+            endsAtText.visibility = View.INVISIBLE
         }
     }
 

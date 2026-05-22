@@ -42,13 +42,13 @@ class EInkSettingsActivity : ComponentActivity() {
         }
 
         findViewById<RelativeLayout>(R.id.keepAwakeRow).setOnClickListener {
-            val current = prefs.getBoolean(PREF_KEEP_AWAKE, false)
+            val current = prefs.getBoolean(PREF_KEEP_AWAKE, true)
             prefs.edit().putBoolean(PREF_KEEP_AWAKE, !current).apply()
             applyKeepAwake(!current)
             updateDisplayValues()
         }
 
-        applyKeepAwake(prefs.getBoolean(PREF_KEEP_AWAKE, false))
+        applyKeepAwake(prefs.getBoolean(PREF_KEEP_AWAKE, true))
     }
 
     private fun applyKeepAwake(enabled: Boolean) {
@@ -59,7 +59,7 @@ class EInkSettingsActivity : ComponentActivity() {
     private fun updateDisplayValues() {
         displayModeValue.text = if (prefs.getString(PREF_DISPLAY_MODE, MODE_BARS) == MODE_BARS) "BARS" else "RADIAL"
         elapsedModeValue.text = if (prefs.getString(PREF_ELAPSED_MODE, MODE_BLINK) == MODE_BLINK) "BLINK" else "EXCLAMATION"
-        keepAwakeValue.text = if (prefs.getBoolean(PREF_KEEP_AWAKE, false)) "ON" else "OFF"
+        keepAwakeValue.text = if (prefs.getBoolean(PREF_KEEP_AWAKE, true)) "ON" else "OFF"
     }
 
     companion object {

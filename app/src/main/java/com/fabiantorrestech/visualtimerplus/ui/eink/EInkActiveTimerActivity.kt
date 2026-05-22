@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -17,6 +18,7 @@ import com.fabiantorrestech.visualtimerplus.timer.TimerInstance
 import com.fabiantorrestech.visualtimerplus.overlay.TimerOverlayManager
 import com.fabiantorrestech.visualtimerplus.timer.TimerRepository
 import com.fabiantorrestech.visualtimerplus.timer.TimerStatus
+import com.fabiantorrestech.visualtimerplus.util.formatEndTimeFromNow
 import kotlinx.coroutines.launch
 
 class EInkActiveTimerActivity : ComponentActivity() {
@@ -25,6 +27,7 @@ class EInkActiveTimerActivity : ComponentActivity() {
     private lateinit var controller: TimerController
     private lateinit var timerView: EInkTimerView
     private lateinit var timerNameText: TextView
+    private lateinit var endTimeText: TextView
     private lateinit var startPauseButton: TextView
     private lateinit var resetButton: TextView
     private lateinit var setTimeButton: TextView
@@ -61,7 +64,7 @@ class EInkActiveTimerActivity : ComponentActivity() {
     private fun applySettings() {
         val prefs = getSharedPreferences("visual_timer_prefs", MODE_PRIVATE)
         timerView.applySettings(prefs)
-        if (prefs.getBoolean(EInkSettingsActivity.PREF_KEEP_AWAKE, false)) {
+        if (prefs.getBoolean(EInkSettingsActivity.PREF_KEEP_AWAKE, true)) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -91,6 +94,7 @@ class EInkActiveTimerActivity : ComponentActivity() {
 
         timerView = findViewById(R.id.timerView)
         timerNameText = findViewById(R.id.timerNameText)
+        endTimeText = findViewById(R.id.endTimeText)
         startPauseButton = findViewById(R.id.startPauseButton)
         resetButton = findViewById(R.id.resetButton)
         setTimeButton = findViewById(R.id.setTimeButton)
@@ -152,6 +156,7 @@ class EInkActiveTimerActivity : ComponentActivity() {
                     }
                     if (controlsChanged || bucket != lastBucket) {
                         updateControls(timer)
+                        updateEndTime(timer)
                         timerNameText.text = timer.activeTimerName.ifBlank { "Timer ${timerIndex + 1}" }
                     }
                 }
@@ -164,6 +169,7 @@ class EInkActiveTimerActivity : ComponentActivity() {
         val initialTimer = TimerRepository.getTimer(timerIndex)
         timerView.update(initialTimer)
         updateControls(initialTimer)
+        updateEndTime(initialTimer)
         timerNameText.text = initialTimer.activeTimerName.ifBlank { "Timer ${timerIndex + 1}" }
         if (initialTimer.status == TimerStatus.Overtime) startBlinking()
     }
@@ -178,6 +184,24 @@ class EInkActiveTimerActivity : ComponentActivity() {
                 timerView.update(timer)
                 updateControls(timer)
             }
+        }
+    }
+
+    private fun updateEndTime(timer: TimerInstance) {
+        val show = timer.status != TimerStatus.Finished &&
+                timer.status != TimerStatus.Overtime &&
+                timer.remainingMillis > 0L
+        endTimeText.visibility = if (show) View.VISIBLE else View.INVISIBLE
+        if (show) {
+            val remainMs = when (timer.status) {
+                TimerStatus.Running -> {
+                    val targetEnd = timer.targetEndTimeMillis
+                        ?: (System.currentTimeMillis() + timer.remainingMillis)
+                    (targetEnd - System.currentTimeMillis()).coerceAtLeast(0L)
+                }
+                else -> timer.remainingMillis
+            }
+            endTimeText.text = "ENDS ${formatEndTimeFromNow(remainMs, showSeconds = true)}"
         }
     }
 
