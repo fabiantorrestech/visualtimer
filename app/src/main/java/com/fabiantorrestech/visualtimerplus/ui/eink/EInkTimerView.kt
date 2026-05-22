@@ -30,7 +30,7 @@ class EInkTimerView @JvmOverloads constructor(
 
     private var timeText: String = "00:00"
     private var statusText: String = "READY"
-    private var progressFraction: Float = 0f  // 0 = empty, 1 = full
+    private var progressFraction: Float = 0f
 
     fun update(timer: TimerInstance) {
         timeText = when (timer.status) {

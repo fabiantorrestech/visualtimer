@@ -17,6 +17,7 @@ import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManage
 import com.fabiantorrestech.visualtimerplus.overlay.TimerOverlayManager
 import com.fabiantorrestech.visualtimerplus.timer.AppState
 import com.fabiantorrestech.visualtimerplus.timer.MAX_TIMERS
+import com.fabiantorrestech.visualtimerplus.timer.findNextAvailableTimerSlot
 import com.fabiantorrestech.visualtimerplus.timer.TimerAction
 import com.fabiantorrestech.visualtimerplus.timer.TimerController
 import com.fabiantorrestech.visualtimerplus.timer.TimerInstance

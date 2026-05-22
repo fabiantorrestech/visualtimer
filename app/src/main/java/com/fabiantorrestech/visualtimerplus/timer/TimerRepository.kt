@@ -193,7 +193,7 @@ object TimerRepository {
             defaultTimerSettings = loadTimerSettings(DEFAULT_PREFIX),
             notificationMode = notificationMode,
             hidePageDotsInCleanMode = preferences.getBoolean(KEY_HIDE_PAGE_DOTS_IN_CLEAN_MODE, true),
-            notificationUpdateIntervalSeconds = preferences.getInt(KEY_NOTIFICATION_UPDATE_INTERVAL, 15),
+            notificationUpdateIntervalSeconds = preferences.getInt(KEY_NOTIFICATION_UPDATE_INTERVAL, 60),
             overlayEnabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, true),
             overlaySize = overlaySize,
             overlayStyle = overlayStyle,
