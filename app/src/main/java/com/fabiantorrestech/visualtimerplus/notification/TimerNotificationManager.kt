@@ -11,6 +11,7 @@ import com.fabiantorrestech.visualtimerplus.ui.eink.EInkMainActivity
 import com.fabiantorrestech.visualtimerplus.ui.screen.TimerFinishedActivity
 import com.fabiantorrestech.visualtimerplus.R
 import com.fabiantorrestech.visualtimerplus.timer.AppState
+import com.fabiantorrestech.visualtimerplus.timer.MAX_TIMERS
 import com.fabiantorrestech.visualtimerplus.timer.NotificationMode
 import com.fabiantorrestech.visualtimerplus.timer.TimerInstance
 import com.fabiantorrestech.visualtimerplus.timer.TimerService
@@ -98,7 +99,7 @@ class TimerNotificationManager(
                 state.timers.filter { it.status == TimerStatus.Idle }.forEach { timer ->
                     notificationManager.cancel(INDIVIDUAL_BASE + timer.id)
                 }
-                for (i in state.timers.size until 20) {
+                for (i in state.timers.size until MAX_TIMERS) {
                     notificationManager.cancel(INDIVIDUAL_BASE + i)
                 }
             }
@@ -107,7 +108,7 @@ class TimerNotificationManager(
 
     fun cancelNotification() {
         notificationManager.cancel(NOTIFICATION_ID)
-        for (i in 0 until 20) {
+        for (i in 0 until MAX_TIMERS) {
             notificationManager.cancel(INDIVIDUAL_BASE + i)
         }
     }

@@ -11,6 +11,7 @@ import com.fabiantorrestech.visualtimerplus.R
 import com.fabiantorrestech.visualtimerplus.timer.TimerAction
 import com.fabiantorrestech.visualtimerplus.timer.TimerController
 import com.fabiantorrestech.visualtimerplus.timer.TimerInstance
+import com.fabiantorrestech.visualtimerplus.overlay.TimerOverlayManager
 import com.fabiantorrestech.visualtimerplus.timer.TimerRepository
 import com.fabiantorrestech.visualtimerplus.timer.TimerStatus
 import kotlinx.coroutines.launch
@@ -24,6 +25,18 @@ class EInkActiveTimerActivity : ComponentActivity() {
     private lateinit var startPauseButton: TextView
     private lateinit var resetButton: TextView
     private lateinit var setTimeButton: TextView
+
+    override fun onResume() {
+        super.onResume()
+        TimerOverlayManager.setAppForeground(true)
+        TimerRepository.setAppForeground(true)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        TimerOverlayManager.setAppForeground(false)
+        TimerRepository.setAppForeground(false)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,7 +77,6 @@ class EInkActiveTimerActivity : ComponentActivity() {
             if (timer.status == TimerStatus.Running || timer.status == TimerStatus.Overtime) return@setOnClickListener
             startActivityForResult(
                 Intent(this, EInkSetTimeActivity::class.java)
-                    .putExtra(EInkSetTimeActivity.EXTRA_TIMER_INDEX, timerIndex)
                     .putExtra(EInkSetTimeActivity.EXTRA_CURRENT_DURATION_MS, timer.selectedDurationMillis),
                 REQUEST_SET_TIME,
             )

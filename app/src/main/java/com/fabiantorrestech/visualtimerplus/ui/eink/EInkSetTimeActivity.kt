@@ -92,7 +92,6 @@ class EInkSetTimeActivity : ComponentActivity() {
     }
 
     companion object {
-        const val EXTRA_TIMER_INDEX = "timer_index"
         const val EXTRA_CURRENT_DURATION_MS = "current_duration_ms"
         const val RESULT_DURATION_MS = "result_duration_ms"
     }
