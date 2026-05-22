@@ -2,6 +2,7 @@ package com.fabiantorrestech.visualtimerplus.ui.eink
 
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.view.View
 import android.view.WindowManager
 import android.widget.RelativeLayout
 import android.widget.TextView
@@ -12,6 +13,9 @@ class EInkSettingsActivity : ComponentActivity() {
 
     private lateinit var prefs: SharedPreferences
     private lateinit var displayModeValue: TextView
+    private lateinit var clockwiseDivider: View
+    private lateinit var clockwiseRow: RelativeLayout
+    private lateinit var clockwiseValue: TextView
     private lateinit var elapsedModeValue: TextView
     private lateinit var keepAwakeValue: TextView
 
@@ -22,6 +26,9 @@ class EInkSettingsActivity : ComponentActivity() {
         prefs = getSharedPreferences("visual_timer_prefs", MODE_PRIVATE)
 
         displayModeValue = findViewById(R.id.displayModeValue)
+        clockwiseDivider = findViewById(R.id.clockwiseDivider)
+        clockwiseRow = findViewById(R.id.clockwiseRow)
+        clockwiseValue = findViewById(R.id.clockwiseValue)
         elapsedModeValue = findViewById(R.id.elapsedModeValue)
         keepAwakeValue = findViewById(R.id.keepAwakeValue)
 
@@ -32,6 +39,12 @@ class EInkSettingsActivity : ComponentActivity() {
         findViewById<RelativeLayout>(R.id.displayModeRow).setOnClickListener {
             val current = prefs.getString(PREF_DISPLAY_MODE, MODE_BARS) ?: MODE_BARS
             prefs.edit().putString(PREF_DISPLAY_MODE, if (current == MODE_BARS) MODE_RADIAL else MODE_BARS).apply()
+            updateDisplayValues()
+        }
+
+        clockwiseRow.setOnClickListener {
+            val current = prefs.getBoolean(PREF_CLOCKWISE, true)
+            prefs.edit().putBoolean(PREF_CLOCKWISE, !current).apply()
             updateDisplayValues()
         }
 
@@ -57,7 +70,12 @@ class EInkSettingsActivity : ComponentActivity() {
     }
 
     private fun updateDisplayValues() {
-        displayModeValue.text = if (prefs.getString(PREF_DISPLAY_MODE, MODE_BARS) == MODE_BARS) "BARS" else "RADIAL"
+        val isRadial = prefs.getString(PREF_DISPLAY_MODE, MODE_BARS) == MODE_RADIAL
+        displayModeValue.text = if (isRadial) "RADIAL" else "BARS"
+        val radialVis = if (isRadial) View.VISIBLE else View.GONE
+        clockwiseDivider.visibility = radialVis
+        clockwiseRow.visibility = radialVis
+        clockwiseValue.text = if (prefs.getBoolean(PREF_CLOCKWISE, true)) "CW" else "CCW"
         elapsedModeValue.text = if (prefs.getString(PREF_ELAPSED_MODE, MODE_BLINK) == MODE_BLINK) "BLINK" else "EXCLAMATION"
         keepAwakeValue.text = if (prefs.getBoolean(PREF_KEEP_AWAKE, true)) "ON" else "OFF"
     }
@@ -66,6 +84,7 @@ class EInkSettingsActivity : ComponentActivity() {
         const val PREF_DISPLAY_MODE = "eink_display_mode"
         const val PREF_ELAPSED_MODE = "eink_elapsed_mode"
         const val PREF_KEEP_AWAKE = "eink_keep_screen_awake"
+        const val PREF_CLOCKWISE = "eink_clockwise"
         const val MODE_BARS = "bars"
         const val MODE_RADIAL = "radial"
         const val MODE_BLINK = "blink"

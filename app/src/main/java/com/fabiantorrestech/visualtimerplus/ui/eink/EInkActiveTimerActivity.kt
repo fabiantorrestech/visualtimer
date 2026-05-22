@@ -1,11 +1,14 @@
 package com.fabiantorrestech.visualtimerplus.ui.eink
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.InputType
 import android.view.View
 import android.view.WindowManager
+import android.widget.EditText
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
@@ -28,6 +31,7 @@ class EInkActiveTimerActivity : ComponentActivity() {
     private lateinit var timerView: EInkTimerView
     private lateinit var timerNameText: TextView
     private lateinit var endTimeText: TextView
+    private lateinit var renameButton: TextView
     private lateinit var startPauseButton: TextView
     private lateinit var resetButton: TextView
     private lateinit var setTimeButton: TextView
@@ -95,11 +99,14 @@ class EInkActiveTimerActivity : ComponentActivity() {
         timerView = findViewById(R.id.timerView)
         timerNameText = findViewById(R.id.timerNameText)
         endTimeText = findViewById(R.id.endTimeText)
+        renameButton = findViewById(R.id.renameButton)
         startPauseButton = findViewById(R.id.startPauseButton)
         resetButton = findViewById(R.id.resetButton)
         setTimeButton = findViewById(R.id.setTimeButton)
 
         findViewById<TextView>(R.id.backButton).setOnClickListener { finish() }
+
+        renameButton.setOnClickListener { showRenameDialog() }
 
         startPauseButton.setOnClickListener {
             val timer = TimerRepository.getTimer(timerIndex)
@@ -185,6 +192,26 @@ class EInkActiveTimerActivity : ComponentActivity() {
                 updateControls(timer)
             }
         }
+    }
+
+    private fun showRenameDialog() {
+        val editText = EditText(this).apply {
+            setText(TimerRepository.getTimer(timerIndex).activeTimerName)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            hint = "Timer name"
+            selectAll()
+            setPadding(48, 32, 48, 32)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("RENAME TIMER")
+            .setView(editText)
+            .setPositiveButton("SAVE") { _, _ ->
+                val name = editText.text.toString().trim()
+                controller.dispatch(TimerAction.SetActiveTimerName(name, timerIndex))
+                timerNameText.text = name.ifBlank { "Timer ${timerIndex + 1}" }
+            }
+            .setNegativeButton("CANCEL", null)
+            .show()
     }
 
     private fun updateEndTime(timer: TimerInstance) {
