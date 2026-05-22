@@ -2,6 +2,9 @@ package com.fabiantorrestech.visualtimerplus.ui.eink
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.WindowManager
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
@@ -26,16 +29,57 @@ class EInkActiveTimerActivity : ComponentActivity() {
     private lateinit var resetButton: TextView
     private lateinit var setTimeButton: TextView
 
+    private val blinkHandler = Handler(Looper.getMainLooper())
+    private var blinkTick = false
+    private var isBlinkRunning = false
+    private val blinkRunnable = object : Runnable {
+        override fun run() {
+            blinkTick = !blinkTick
+            timerView.setBlinkTick(blinkTick)
+            blinkHandler.postDelayed(this, 2500L)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         TimerOverlayManager.setAppForeground(true)
         TimerRepository.setAppForeground(true)
+        applySettings()
     }
 
     override fun onPause() {
         super.onPause()
         TimerOverlayManager.setAppForeground(false)
         TimerRepository.setAppForeground(false)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        stopBlinking()
+    }
+
+    private fun applySettings() {
+        val prefs = getSharedPreferences("visual_timer_prefs", MODE_PRIVATE)
+        timerView.applySettings(prefs)
+        if (prefs.getBoolean(EInkSettingsActivity.PREF_KEEP_AWAKE, false)) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    private fun startBlinking() {
+        if (isBlinkRunning) return
+        isBlinkRunning = true
+        blinkTick = false
+        blinkHandler.post(blinkRunnable)
+    }
+
+    private fun stopBlinking() {
+        if (!isBlinkRunning) return
+        isBlinkRunning = false
+        blinkHandler.removeCallbacks(blinkRunnable)
+        timerView.setBlinkTick(false)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,12 +129,21 @@ class EInkActiveTimerActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 var lastBucket = Long.MIN_VALUE
+                var prevStatus: TimerStatus? = null
                 TimerRepository.state.collect { state ->
                     val timer = state.timers.getOrNull(timerIndex)
                     if (timer == null) {
                         finish()
                         return@collect
                     }
+
+                    if (timer.status == TimerStatus.Overtime && prevStatus != TimerStatus.Overtime) {
+                        startBlinking()
+                    } else if (timer.status != TimerStatus.Overtime && prevStatus == TimerStatus.Overtime) {
+                        stopBlinking()
+                    }
+                    prevStatus = timer.status
+
                     val bucket = einkTimerBucket(timer)
                     val controlsChanged = timer.status.ordinal != (lastBucket % 10).toInt()
                     if (bucket != lastBucket) {
@@ -105,11 +158,14 @@ class EInkActiveTimerActivity : ComponentActivity() {
             }
         }
 
+        applySettings()
+
         // Force initial draw
         val initialTimer = TimerRepository.getTimer(timerIndex)
         timerView.update(initialTimer)
         updateControls(initialTimer)
         timerNameText.text = initialTimer.activeTimerName.ifBlank { "Timer ${timerIndex + 1}" }
+        if (initialTimer.status == TimerStatus.Overtime) startBlinking()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

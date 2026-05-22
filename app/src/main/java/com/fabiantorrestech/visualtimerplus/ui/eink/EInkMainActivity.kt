@@ -30,6 +30,7 @@ class EInkMainActivity : ComponentActivity() {
     private lateinit var controller: TimerController
     private lateinit var adapter: TimerListAdapter
     private lateinit var addButton: TextView
+    private lateinit var settingsButton: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,6 +41,10 @@ class EInkMainActivity : ComponentActivity() {
 
         val recyclerView = findViewById<RecyclerView>(R.id.timerList)
         addButton = findViewById(R.id.addTimerButton)
+        settingsButton = findViewById(R.id.settingsButton)
+        settingsButton.setOnClickListener {
+            startActivity(Intent(this, EInkSettingsActivity::class.java))
+        }
 
         adapter = TimerListAdapter { timerIndex ->
             openTimer(timerIndex)

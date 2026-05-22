@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FFFFFF">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="#FFFFFF">
+
+        <TextView
+            android:id="@+id/backButton"
+            android:layout_width="64dp"
+            android:layout_height="match_parent"
+            android:text="←"
+            android:textSize="26sp"
+            android:textColor="#000000"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:layout_alignParentStart="true"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:text="SETTINGS"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:layout_centerInParent="true"/>
+
+    </RelativeLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:background="#000000"/>
+
+    <RelativeLayout
+        android:id="@+id/displayModeRow"
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TIMER DISPLAY"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:fontFamily="monospace"
+            android:layout_centerVertical="true"
+            android:layout_alignParentStart="true"/>
+
+        <TextView
+            android:id="@+id/displayModeValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BARS"
+            android:textSize="18sp"
+            android:textColor="#000000"
+            android:fontFamily="monospace"
+            android:layout_centerVertical="true"
+            android:layout_alignParentEnd="true"/>
+
+    </RelativeLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#000000"/>
+
+    <RelativeLayout
+        android:id="@+id/elapsedModeRow"
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ELAPSED ALERT"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:fontFamily="monospace"
+            android:layout_centerVertical="true"
+            android:layout_alignParentStart="true"/>
+
+        <TextView
+            android:id="@+id/elapsedModeValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BLINK"
+            android:textSize="18sp"
+            android:textColor="#000000"
+            android:fontFamily="monospace"
+            android:layout_centerVertical="true"
+            android:layout_alignParentEnd="true"/>
+
+    </RelativeLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#000000"/>
+
+    <RelativeLayout
+        android:id="@+id/keepAwakeRow"
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="KEEP AWAKE"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:fontFamily="monospace"
+            android:layout_centerVertical="true"
+            android:layout_alignParentStart="true"/>
+
+        <TextView
+            android:id="@+id/keepAwakeValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="OFF"
+            android:textSize="18sp"
+            android:textColor="#000000"
+            android:fontFamily="monospace"
+            android:layout_centerVertical="true"
+            android:layout_alignParentEnd="true"/>
+
+    </RelativeLayout>
+
+</LinearLayout>

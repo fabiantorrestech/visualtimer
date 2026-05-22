@@ -1,9 +1,11 @@
 package com.fabiantorrestech.visualtimerplus.ui.eink
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.View
@@ -18,19 +20,41 @@ class EInkTimerView @JvmOverloads constructor(
 ) : View(context, attrs, defStyle) {
 
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.BLACK
         textAlign = Paint.Align.CENTER
         typeface = Typeface.MONOSPACE
         isFakeBoldText = true
     }
-    private val blockPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = Color.BLACK
+    private val blockPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.BUTT
     }
+    private val ringOval = RectF()
 
     private var timeText: String = "00:00"
     private var statusText: String = "READY"
     private var progressFraction: Float = 0f
+    private var isElapsed: Boolean = false
+
+    // Settings
+    private var displayMode: String = EInkSettingsActivity.MODE_BARS
+    private var elapsedMode: String = EInkSettingsActivity.MODE_BLINK
+
+    // Blink state (driven by activity Handler)
+    private var blinkTick: Boolean = false
+
+    fun applySettings(prefs: SharedPreferences) {
+        displayMode = prefs.getString(EInkSettingsActivity.PREF_DISPLAY_MODE, EInkSettingsActivity.MODE_BARS)
+            ?: EInkSettingsActivity.MODE_BARS
+        elapsedMode = prefs.getString(EInkSettingsActivity.PREF_ELAPSED_MODE, EInkSettingsActivity.MODE_BLINK)
+            ?: EInkSettingsActivity.MODE_BLINK
+        invalidate()
+    }
+
+    fun setBlinkTick(tick: Boolean) {
+        blinkTick = tick
+        invalidate()
+    }
 
     fun update(timer: TimerInstance) {
         timeText = when (timer.status) {
@@ -45,17 +69,13 @@ class EInkTimerView @JvmOverloads constructor(
             TimerStatus.Idle -> if (timer.selectedDurationMillis > 0L) "READY" else "SET TIME"
         }
         progressFraction = when (timer.status) {
-            TimerStatus.Running, TimerStatus.Paused -> {
+            TimerStatus.Running, TimerStatus.Paused, TimerStatus.Idle -> {
                 val total = timer.selectedDurationMillis.coerceAtLeast(1L)
                 (timer.remainingMillis.toFloat() / total).coerceIn(0f, 1f)
             }
-            TimerStatus.Idle -> {
-                val total = timer.selectedDurationMillis.coerceAtLeast(1L)
-                (timer.remainingMillis.toFloat() / total).coerceIn(0f, 1f)
-            }
-            TimerStatus.Overtime -> 0f
-            TimerStatus.Finished -> 0f
+            TimerStatus.Overtime, TimerStatus.Finished -> 0f
         }
+        isElapsed = timer.status == TimerStatus.Overtime || timer.status == TimerStatus.Finished
         invalidate()
     }
 
@@ -65,21 +85,41 @@ class EInkTimerView @JvmOverloads constructor(
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        canvas.drawColor(Color.WHITE)
+        val inverted = isElapsed && elapsedMode == EInkSettingsActivity.MODE_BLINK && blinkTick
+        val bg = if (inverted) Color.BLACK else Color.WHITE
+        val fg = if (inverted) Color.WHITE else Color.BLACK
 
-        // Large time text — centred vertically in the upper 55% of the view
+        canvas.drawColor(bg)
+
+        // Exclamation overlay (mode B) — blink "!!" above time text
+        val showExclamation = isElapsed && elapsedMode == EInkSettingsActivity.MODE_EXCLAMATION && blinkTick
+
+        if (displayMode == EInkSettingsActivity.MODE_RADIAL) {
+            drawRadial(canvas, w, h, fg, showExclamation)
+        } else {
+            drawBars(canvas, w, h, fg, showExclamation)
+        }
+    }
+
+    private fun drawBars(canvas: Canvas, w: Float, h: Float, fg: Int, showExclamation: Boolean) {
+        textPaint.color = fg
+
+        if (showExclamation) {
+            val exclSize = (w * 0.18f).coerceAtMost(h * 0.25f)
+            textPaint.textSize = exclSize
+            canvas.drawText("!!", w / 2f, h * 0.20f, textPaint)
+        }
+
         val timeTextSize = (w * 0.20f).coerceAtMost(h * 0.30f)
         textPaint.textSize = timeTextSize
         val timeCenterY = h * 0.38f
         val timeBaseline = timeCenterY - (textPaint.descent() + textPaint.ascent()) / 2f
         canvas.drawText(timeText, w / 2f, timeBaseline, textPaint)
 
-        // Status text below the time
         val statusTextSize = (w * 0.065f).coerceAtMost(h * 0.085f)
         textPaint.textSize = statusTextSize
         canvas.drawText(statusText, w / 2f, h * 0.56f, textPaint)
 
-        // Progress blocks — 20 discrete segments across 90% of the width
         val blockCount = 20
         val totalBlockWidth = w * 0.88f
         val blockSpacing = totalBlockWidth / blockCount
@@ -89,6 +129,7 @@ class EInkTimerView @JvmOverloads constructor(
         val startX = (w - totalBlockWidth) / 2f
         val filledCount = (progressFraction * blockCount).toInt()
 
+        blockPaint.color = fg
         for (i in 0 until blockCount) {
             val left = startX + i * blockSpacing
             val right = left + blockW
@@ -101,5 +142,49 @@ class EInkTimerView @JvmOverloads constructor(
                 canvas.drawRect(left, blockTop, right, blockTop + blockH, blockPaint)
             }
         }
+    }
+
+    private fun drawRadial(canvas: Canvas, w: Float, h: Float, fg: Int, showExclamation: Boolean) {
+        val minDim = minOf(w, h)
+        val ringRadius = minDim * 0.36f
+        val ringStroke = ringRadius * 0.42f
+        val centerX = w / 2f
+        val centerY = h * 0.44f
+
+        ringOval.set(
+            centerX - ringRadius, centerY - ringRadius,
+            centerX + ringRadius, centerY + ringRadius,
+        )
+
+        // Filled arc (remaining time)
+        arcPaint.color = fg
+        arcPaint.strokeWidth = ringStroke
+        if (progressFraction > 0f) {
+            canvas.drawArc(ringOval, -90f, 360f * progressFraction, false, arcPaint)
+        }
+
+        // Thin outline for outer and inner ring border
+        arcPaint.strokeWidth = 2f
+        canvas.drawArc(ringOval, 0f, 360f, false, arcPaint)
+        val innerR = ringRadius - ringStroke / 2f
+        ringOval.set(centerX - innerR, centerY - innerR, centerX + innerR, centerY + innerR)
+        canvas.drawArc(ringOval, 0f, 360f, false, arcPaint)
+
+        textPaint.color = fg
+
+        if (showExclamation) {
+            val exclSize = (w * 0.14f).coerceAtMost(h * 0.18f)
+            textPaint.textSize = exclSize
+            canvas.drawText("!!", centerX, centerY - ringRadius * 0.20f, textPaint)
+        } else {
+            val timeTextSize = (ringRadius * 0.60f).coerceAtMost(h * 0.18f)
+            textPaint.textSize = timeTextSize
+            val timeBaseline = centerY - (textPaint.descent() + textPaint.ascent()) / 2f
+            canvas.drawText(timeText, centerX, timeBaseline, textPaint)
+        }
+
+        val statusTextSize = (w * 0.065f).coerceAtMost(h * 0.085f)
+        textPaint.textSize = statusTextSize
+        canvas.drawText(statusText, centerX, h * 0.80f, textPaint)
     }
 }

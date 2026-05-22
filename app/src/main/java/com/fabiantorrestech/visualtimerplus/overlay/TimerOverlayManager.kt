@@ -78,6 +78,34 @@ object TimerOverlayManager {
     private var panelFocusedTimerIndex: Int = 0
     private val longPressHandler = Handler(Looper.getMainLooper())
 
+    private val overlayBlinkHandler = Handler(Looper.getMainLooper())
+    private var isOverlayBlinkActive = false
+    private var overlayBlinkTick = false
+    private var cachedElapsedMode = "blink"
+    private val overlayBlinkRunnable = object : Runnable {
+        override fun run() {
+            overlayBlinkTick = !overlayBlinkTick
+            overlayView?.setBlinkTick(overlayBlinkTick, cachedElapsedMode)
+            overlayBlinkHandler.postDelayed(this, 2500L)
+        }
+    }
+
+    private fun startOverlayBlink() {
+        if (isOverlayBlinkActive) return
+        cachedElapsedMode = appContext.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            .getString("eink_elapsed_mode", "blink") ?: "blink"
+        isOverlayBlinkActive = true
+        overlayBlinkTick = false
+        overlayBlinkHandler.post(overlayBlinkRunnable)
+    }
+
+    private fun stopOverlayBlink() {
+        if (!isOverlayBlinkActive) return
+        isOverlayBlinkActive = false
+        overlayBlinkHandler.removeCallbacks(overlayBlinkRunnable)
+        overlayView?.setBlinkTick(false, cachedElapsedMode)
+    }
+
     private var lastAppliedParamsX: Int = Int.MIN_VALUE
     private var lastAppliedParamsY: Int = Int.MIN_VALUE
     private var lastAppliedParamsWidth: Int = -1
@@ -149,12 +177,14 @@ object TimerOverlayManager {
             timer.status in setOf(TimerStatus.Running, TimerStatus.Overtime, TimerStatus.Paused)
 
         if (!shouldShow) {
+            stopOverlayBlink()
             removeOverlay()
             return
         }
 
         ensureOverlayView()
         updateOverlay(timerIndex!!, timer!!)
+        if (timer.status == TimerStatus.Overtime) startOverlayBlink() else stopOverlayBlink()
     }
 
     private fun ensureOverlayView() {
@@ -653,6 +683,7 @@ object TimerOverlayManager {
                 when (timer.status) {
                     TimerStatus.Running -> sendServiceAction(TimerService.ACTION_PAUSE, panelFocusedTimerIndex, false)
                     TimerStatus.Paused -> sendServiceAction(TimerService.ACTION_RESUME, panelFocusedTimerIndex, true)
+                    TimerStatus.Overtime, TimerStatus.Finished -> sendServiceAction(TimerService.ACTION_DISMISS_FINISHED, panelFocusedTimerIndex, false)
                     else -> {}
                 }
             }
@@ -928,6 +959,14 @@ object TimerOverlayManager {
         private var style: OverlayStyle = OverlayStyle.Ring
         private var overlaySize: OverlaySize = OverlaySize.Medium
         private var lastDisplayBucket: Long = Long.MIN_VALUE
+        private var blinkTick: Boolean = false
+        private var blinkMode: String = "blink"
+
+        fun setBlinkTick(tick: Boolean, mode: String) {
+            blinkTick = tick
+            blinkMode = mode
+            invalidate()
+        }
 
         fun render(timer: TimerInstance, style: OverlayStyle, overlaySize: OverlaySize) {
             val newBucket = computeDisplayBucket(timer, style, overlaySize)
@@ -961,19 +1000,27 @@ object TimerOverlayManager {
             val h = height.toFloat()
             if (w <= 0f || h <= 0f) return
 
-            fillPaint.color = Color.WHITE
+            val isElapsed = timer.status == TimerStatus.Overtime || timer.status == TimerStatus.Finished
+            val invertColors = isElapsed && blinkMode == "blink" && blinkTick
+            val showExclamation = isElapsed && blinkMode == "exclamation" && blinkTick
+
+            val bgColor = if (invertColors) Color.BLACK else Color.WHITE
+            val fgColor = if (invertColors) Color.WHITE else Color.BLACK
+
+            fillPaint.color = bgColor
             canvas.drawRect(0f, 0f, w, h, fillPaint)
 
             val border = max(2f, w * 0.04f)
             outlinePaint.strokeWidth = border
-            outlinePaint.color = Color.BLACK
+            outlinePaint.color = fgColor
             canvas.drawRect(border / 2f, border / 2f, w - border / 2f, h - border / 2f, outlinePaint)
 
-            val timeStr = if (timer.status == TimerStatus.Overtime) {
-                "+${timer.displayMillis.formatClockTime()}"
-            } else {
-                timer.displayMillis.formatClockTime()
+            val timeStr = when {
+                showExclamation -> "!"
+                timer.status == TimerStatus.Overtime -> "+${timer.displayMillis.formatClockTime()}"
+                else -> timer.displayMillis.formatClockTime()
             }
+            textPaint.color = fgColor
             textPaint.textSize = w * 0.26f
             val baseline = h / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
             canvas.drawText(timeStr, w / 2f, baseline, textPaint)
@@ -1151,7 +1198,7 @@ object TimerOverlayManager {
             } else {
                 textPaint.textSize = iconSize
                 textPaint.color = Color.WHITE
-                canvas.drawText(if (isPaused || isOvertime) "▶" else "⏸", thirdW * 0.5f, iconY, textPaint)
+                canvas.drawText(when { isOvertime -> "✕"; isPaused -> "▶"; else -> "⏸" }, thirdW * 0.5f, iconY, textPaint)
                 canvas.drawText("↺", thirdW * 1.5f, iconY, textPaint)
                 canvas.drawText("↗", thirdW * 2.5f, iconY, textPaint)
                 pauseResumeRect.set(0f, ctrlTop, thirdW, h)
