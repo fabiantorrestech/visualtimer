@@ -22,7 +22,7 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.fabiantorrestech.visualtimerplus.MainActivity
+import com.fabiantorrestech.visualtimerplus.ui.eink.EInkMainActivity
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
 import com.fabiantorrestech.visualtimerplus.timer.AppState
 import com.fabiantorrestech.visualtimerplus.timer.ONE_HOUR_MILLIS
@@ -727,7 +727,7 @@ object TimerOverlayManager {
     }
 
     private fun openAppToTimer(timerIndex: Int) {
-        val intent = Intent(appContext, MainActivity::class.java)
+        val intent = Intent(appContext, EInkMainActivity::class.java)
             .putExtra(TimerNotificationManager.EXTRA_TARGET_TIMER_INDEX, timerIndex)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         appContext.startActivity(intent)
@@ -980,27 +980,30 @@ object TimerOverlayManager {
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
-            val diameter = min(width, height).toFloat()
-            if (diameter <= 0f) return
+            val w = width.toFloat()
+            val h = height.toFloat()
+            if (w <= 0f || h <= 0f) return
 
-            val centerX = width / 2f
-            val centerY = height / 2f
-            val radius = diameter / 2f
-            val strokeWidth = diameter * 0.115f
-            val inset = strokeWidth / 2f + diameter * 0.02f
-            arcBounds.set(inset, inset, width - inset, height - inset)
+            // White fill
+            fillPaint.color = Color.WHITE
+            canvas.drawRect(0f, 0f, w, h, fillPaint)
 
-            val alphaFactor = overtimeAlpha(timer.status)
-            val progress = progressSpec(timer)
+            // Black border
+            val border = max(2f, w * 0.04f)
+            outlinePaint.strokeWidth = border
+            outlinePaint.color = Color.BLACK
+            canvas.drawRect(border / 2f, border / 2f, w - border / 2f, h - border / 2f, outlinePaint)
 
-            when (style) {
-                OverlayStyle.Ring -> drawRingStyle(canvas, centerX, centerY, radius, strokeWidth, alphaFactor, progress)
-                OverlayStyle.TimerFace -> drawTimerFaceStyle(canvas, centerX, centerY, radius, alphaFactor, progress)
+            // Large time text
+            val timeStr = if (timer.status == TimerStatus.Overtime) {
+                "+${timer.displayMillis.formatClockTime()}"
+            } else {
+                timer.displayMillis.formatClockTime()
             }
-
-            drawCenteredText(canvas, centerX, centerY, diameter)
-
-            if (indicatorAlpha > 0f) drawStatusIndicator(canvas, centerX, centerY, diameter)
+            textPaint.color = Color.BLACK
+            textPaint.textSize = w * 0.26f
+            val baseline = h / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
+            canvas.drawText(timeStr, w / 2f, baseline, textPaint)
         }
 
         private fun drawRingStyle(

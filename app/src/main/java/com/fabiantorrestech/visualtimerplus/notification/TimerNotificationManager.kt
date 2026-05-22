@@ -7,7 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import com.fabiantorrestech.visualtimerplus.MainActivity
+import com.fabiantorrestech.visualtimerplus.ui.eink.EInkMainActivity
 import com.fabiantorrestech.visualtimerplus.ui.screen.TimerFinishedActivity
 import com.fabiantorrestech.visualtimerplus.R
 import com.fabiantorrestech.visualtimerplus.timer.AppState
@@ -276,7 +276,7 @@ class TimerNotificationManager(
     }
 
     private fun contentPendingIntent(timerIndex: Int): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java)
+        val intent = Intent(context, EInkMainActivity::class.java)
             .putExtra(EXTRA_TARGET_TIMER_INDEX, timerIndex)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         return PendingIntent.getActivity(
@@ -405,7 +405,7 @@ class TimerNotificationManager(
             nm.createNotificationChannel(channel)
 
             val label = name.ifBlank { durationMillis.formatClockTime() }
-            val launchIntent = Intent(context, MainActivity::class.java).apply {
+            val launchIntent = Intent(context, EInkMainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra(EXTRA_TARGET_TIMER_INDEX, timerIndex)
             }

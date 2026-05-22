@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FFFFFF">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/backButton"
+            android:layout_width="64dp"
+            android:layout_height="match_parent"
+            android:text="&#8592;"
+            android:textSize="28sp"
+            android:textColor="#000000"
+            android:gravity="center"
+            android:fontFamily="monospace"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="SET TIME"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:fontFamily="monospace"
+            android:gravity="center_vertical|center_horizontal"/>
+
+        <View android:layout_width="64dp" android:layout_height="match_parent"/>
+
+    </LinearLayout>
+
+    <View android:layout_width="match_parent" android:layout_height="2dp" android:background="#000000"/>
+
+    <!-- Large time display -->
+    <TextView
+        android:id="@+id/timeDisplay"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="2"
+        android:textSize="64sp"
+        android:textStyle="bold"
+        android:textColor="#000000"
+        android:fontFamily="monospace"
+        android:gravity="center"/>
+
+    <View android:layout_width="match_parent" android:layout_height="2dp" android:background="#000000"/>
+
+    <!-- Hours row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="60dp"
+            android:layout_height="match_parent"
+            android:text="H"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:fontFamily="monospace"
+            android:gravity="center"/>
+
+        <View android:layout_width="1dp" android:layout_height="match_parent" android:background="#000000"/>
+
+        <TextView
+            android:id="@+id/hoursDown"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="&#8722;"
+            android:textSize="36sp"
+            android:textColor="#000000"
+            android:background="#FFFFFF"
+            android:gravity="center"
+            android:fontFamily="monospace"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <View android:layout_width="1dp" android:layout_height="match_parent" android:background="#000000"/>
+
+        <TextView
+            android:id="@+id/hoursUp"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="+"
+            android:textSize="36sp"
+            android:textColor="#000000"
+            android:background="#FFFFFF"
+            android:gravity="center"
+            android:fontFamily="monospace"
+            android:clickable="true"
+            android:focusable="true"/>
+
+    </LinearLayout>
+
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#000000"/>
+
+    <!-- Minutes row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="60dp"
+            android:layout_height="match_parent"
+            android:text="M"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:fontFamily="monospace"
+            android:gravity="center"/>
+
+        <View android:layout_width="1dp" android:layout_height="match_parent" android:background="#000000"/>
+
+        <TextView
+            android:id="@+id/minutesDown"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="&#8722;"
+            android:textSize="36sp"
+            android:textColor="#000000"
+            android:background="#FFFFFF"
+            android:gravity="center"
+            android:fontFamily="monospace"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <View android:layout_width="1dp" android:layout_height="match_parent" android:background="#000000"/>
+
+        <TextView
+            android:id="@+id/minutesUp"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="+"
+            android:textSize="36sp"
+            android:textColor="#000000"
+            android:background="#FFFFFF"
+            android:gravity="center"
+            android:fontFamily="monospace"
+            android:clickable="true"
+            android:focusable="true"/>
+
+    </LinearLayout>
+
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#000000"/>
+
+    <!-- Seconds row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="60dp"
+            android:layout_height="match_parent"
+            android:text="S"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:fontFamily="monospace"
+            android:gravity="center"/>
+
+        <View android:layout_width="1dp" android:layout_height="match_parent" android:background="#000000"/>
+
+        <TextView
+            android:id="@+id/secondsDown"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="&#8722;"
+            android:textSize="36sp"
+            android:textColor="#000000"
+            android:background="#FFFFFF"
+            android:gravity="center"
+            android:fontFamily="monospace"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <View android:layout_width="1dp" android:layout_height="match_parent" android:background="#000000"/>
+
+        <TextView
+            android:id="@+id/secondsUp"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="+"
+            android:textSize="36sp"
+            android:textColor="#000000"
+            android:background="#FFFFFF"
+            android:gravity="center"
+            android:fontFamily="monospace"
+            android:clickable="true"
+            android:focusable="true"/>
+
+    </LinearLayout>
+
+    <View android:layout_width="match_parent" android:layout_height="2dp" android:background="#000000"/>
+
+    <!-- Bottom action row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/cancelButton"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="CANCEL"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:background="#FFFFFF"
+            android:gravity="center"
+            android:fontFamily="monospace"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <View android:layout_width="2dp" android:layout_height="match_parent" android:background="#000000"/>
+
+        <TextView
+            android:id="@+id/confirmButton"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="2"
+            android:text="CONFIRM"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:background="#000000"
+            android:gravity="center"
+            android:fontFamily="monospace"
+            android:clickable="true"
+            android:focusable="true"/>
+
+    </LinearLayout>
+
+</LinearLayout>
