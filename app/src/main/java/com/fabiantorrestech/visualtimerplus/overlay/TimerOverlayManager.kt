@@ -1,12 +1,12 @@
 package com.fabiantorrestech.visualtimerplus.overlay
 
 import android.accessibilityservice.AccessibilityService
-import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.RectF
@@ -25,7 +25,6 @@ import androidx.core.view.WindowInsetsCompat
 import com.fabiantorrestech.visualtimerplus.ui.eink.EInkMainActivity
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
 import com.fabiantorrestech.visualtimerplus.timer.AppState
-import com.fabiantorrestech.visualtimerplus.timer.ONE_HOUR_MILLIS
 import com.fabiantorrestech.visualtimerplus.timer.OverlayLabelPosition
 import com.fabiantorrestech.visualtimerplus.timer.OverlaySize
 import com.fabiantorrestech.visualtimerplus.timer.OverlayStyle
@@ -79,6 +78,12 @@ object TimerOverlayManager {
     private var renderedCollapsedLabelPosition: OverlayLabelPosition? = null
     private var panelFocusedTimerIndex: Int = 0
     private val longPressHandler = Handler(Looper.getMainLooper())
+
+    private var lastAppliedParamsX: Int = Int.MIN_VALUE
+    private var lastAppliedParamsY: Int = Int.MIN_VALUE
+    private var lastAppliedParamsWidth: Int = -1
+    private var lastAppliedParamsHeight: Int = -1
+    private var lastAppliedParamsFlags: Int = -1
 
     private const val PREFS_NAME = "visual_timer_prefs"
     private const val KEY_OVERLAY_SNAPPED_LEFT = "overlay_pos_left_edge"
@@ -476,6 +481,11 @@ object TimerOverlayManager {
         renderedCollapsedLabelPosition = null
         longPressHandler.removeCallbacksAndMessages(null)
         clearImeTracking()
+        lastAppliedParamsX = Int.MIN_VALUE
+        lastAppliedParamsY = Int.MIN_VALUE
+        lastAppliedParamsWidth = -1
+        lastAppliedParamsHeight = -1
+        lastAppliedParamsFlags = -1
     }
 
     private fun clampPosition(params: WindowManager.LayoutParams) {
@@ -720,6 +730,16 @@ object TimerOverlayManager {
     private fun updateOverlayLayout(params: WindowManager.LayoutParams) {
         val container = overlayContainer ?: return
         val wm = activeWindowManager ?: windowManager
+        if (params.x == lastAppliedParamsX &&
+            params.y == lastAppliedParamsY &&
+            params.width == lastAppliedParamsWidth &&
+            params.height == lastAppliedParamsHeight &&
+            params.flags == lastAppliedParamsFlags) return
+        lastAppliedParamsX = params.x
+        lastAppliedParamsY = params.y
+        lastAppliedParamsWidth = params.width
+        lastAppliedParamsHeight = params.height
+        lastAppliedParamsFlags = params.flags
         try {
             wm.updateViewLayout(container, params)
         } catch (_: IllegalArgumentException) {
@@ -896,47 +916,26 @@ object TimerOverlayManager {
     // ── Overlay Timer View ───────────────────────────────────────────────────────
 
     private class OverlayTimerView(context: Context) : View(context) {
-        private val ringTrackColor = Color.parseColor("#33111111")
-        private val timerTrackColor = Color.parseColor("#CC000000")
-        private val ringRed = Color.parseColor("#EF4444")
-        private val timerRedDark = Color.parseColor("#7F1D1D")
-        private val pausedColor = Color.parseColor("#D4D4D8")
-        private val overtimeColor = Color.parseColor("#DC2626")
-        private val outlineColor = Color.parseColor("#33FFFFFF")
-
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-        private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeCap = Paint.Cap.ROUND
-        }
         private val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
         private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
+            color = Color.BLACK
             textAlign = Paint.Align.CENTER
+            typeface = Typeface.MONOSPACE
             isFakeBoldText = true
         }
-        private val arcBounds = RectF()
-        private val indicatorPath = Path()
 
         private var timer: TimerInstance = TimerInstance(id = 0)
         private var style: OverlayStyle = OverlayStyle.Ring
         private var overlaySize: OverlaySize = OverlaySize.Medium
-
-        private var indicatorAlpha: Float = 0f
-        private var indicatorIsPause: Boolean = true
-        private var indicatorAnimator: ValueAnimator? = null
         private var lastDisplayBucket: Long = Long.MIN_VALUE
 
         fun render(timer: TimerInstance, style: OverlayStyle, overlaySize: OverlaySize) {
             val newBucket = computeDisplayBucket(timer, style, overlaySize)
-            val changed = newBucket != lastDisplayBucket
-            if (indicatorIsPause && indicatorAlpha > 0f && timer.status == TimerStatus.Running) {
-                clearStatusIndicator()
-            }
             this.timer = timer
             this.style = style
             this.overlaySize = overlaySize
-            if (changed) {
+            if (newBucket != lastDisplayBucket) {
                 lastDisplayBucket = newBucket
                 invalidate()
             }
@@ -954,29 +953,8 @@ object TimerOverlayManager {
                 overlaySize.ordinal.toLong()
         }
 
-        fun showStatusIndicator(isPaused: Boolean) {
-            indicatorAnimator?.cancel()
-            indicatorIsPause = isPaused
-            indicatorAlpha = 1f
-            if (!isPaused) {
-                indicatorAnimator = ValueAnimator.ofFloat(1f, 0f).apply {
-                    startDelay = 1000L
-                    duration = 800L
-                    addUpdateListener {
-                        indicatorAlpha = it.animatedValue as Float
-                        invalidate()
-                    }
-                    start()
-                }
-            }
-            invalidate()
-        }
-
-        private fun clearStatusIndicator() {
-            indicatorAnimator?.cancel()
-            indicatorAlpha = 0f
-            invalidate()
-        }
+        // No-op: indicator is not drawn on e-ink overlay; haptic confirms the action
+        fun showStatusIndicator(@Suppress("UNUSED_PARAMETER") isPaused: Boolean) = Unit
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
@@ -984,169 +962,23 @@ object TimerOverlayManager {
             val h = height.toFloat()
             if (w <= 0f || h <= 0f) return
 
-            // White fill
             fillPaint.color = Color.WHITE
             canvas.drawRect(0f, 0f, w, h, fillPaint)
 
-            // Black border
             val border = max(2f, w * 0.04f)
             outlinePaint.strokeWidth = border
             outlinePaint.color = Color.BLACK
             canvas.drawRect(border / 2f, border / 2f, w - border / 2f, h - border / 2f, outlinePaint)
 
-            // Large time text
             val timeStr = if (timer.status == TimerStatus.Overtime) {
                 "+${timer.displayMillis.formatClockTime()}"
             } else {
                 timer.displayMillis.formatClockTime()
             }
-            textPaint.color = Color.BLACK
             textPaint.textSize = w * 0.26f
             val baseline = h / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
             canvas.drawText(timeStr, w / 2f, baseline, textPaint)
         }
-
-        private fun drawRingStyle(
-            canvas: Canvas,
-            centerX: Float,
-            centerY: Float,
-            radius: Float,
-            strokeWidth: Float,
-            alphaFactor: Float,
-            progress: OverlayProgressSpec,
-        ) {
-            fillPaint.color = timerTrackColor
-            canvas.drawCircle(centerX, centerY, radius - strokeWidth * 0.35f, fillPaint)
-
-            ringPaint.strokeWidth = strokeWidth
-            ringPaint.color = ringTrackColor
-            canvas.drawArc(arcBounds, 0f, 360f, false, ringPaint)
-
-            ringPaint.color = accentColor().withAlpha(alphaFactor)
-            if (timer.status == TimerStatus.Overtime) {
-                canvas.drawArc(arcBounds, -90f, 359.9f, false, ringPaint)
-            } else if (progress.primaryFraction > 0f) {
-                canvas.drawArc(arcBounds, -90f, progress.sweepSign * 360f * progress.primaryFraction, false, ringPaint)
-            }
-
-            outlinePaint.strokeWidth = max(1f, diameterPx() * 0.012f)
-            outlinePaint.color = outlineColor
-            canvas.drawCircle(centerX, centerY, radius - outlinePaint.strokeWidth / 2f, outlinePaint)
-        }
-
-        private fun drawTimerFaceStyle(
-            canvas: Canvas,
-            centerX: Float,
-            centerY: Float,
-            radius: Float,
-            alphaFactor: Float,
-            progress: OverlayProgressSpec,
-        ) {
-            fillPaint.color = timerTrackColor
-            canvas.drawCircle(centerX, centerY, radius, fillPaint)
-
-            if (timer.status == TimerStatus.Overtime) {
-                fillPaint.color = overtimeColor.withAlpha(alphaFactor)
-                canvas.drawCircle(centerX, centerY, radius, fillPaint)
-            } else if (progress.showTwoLayer) {
-                fillPaint.color = timerRedDark
-                canvas.drawCircle(centerX, centerY, radius, fillPaint)
-                if (progress.overlayFraction > 0f) {
-                    fillPaint.color = accentColor()
-                    canvas.drawArc(arcBounds, -90f, progress.sweepSign * 360f * progress.overlayFraction, true, fillPaint)
-                }
-            } else if (progress.primaryFraction > 0f) {
-                fillPaint.color = accentColor()
-                canvas.drawArc(arcBounds, -90f, progress.sweepSign * 360f * progress.primaryFraction, true, fillPaint)
-            }
-
-            outlinePaint.strokeWidth = max(1f, diameterPx() * 0.012f)
-            outlinePaint.color = outlineColor
-            canvas.drawCircle(centerX, centerY, radius - outlinePaint.strokeWidth / 2f, outlinePaint)
-        }
-
-        private fun drawCenteredText(canvas: Canvas, centerX: Float, centerY: Float, diameter: Float) {
-            val sizeFactor = when (overlaySize) {
-                OverlaySize.Small -> 0.21f
-                OverlaySize.Medium -> 0.22f
-                OverlaySize.Large -> 0.23f
-            }
-            textPaint.textSize = diameter * sizeFactor
-            textPaint.color = Color.WHITE
-            val text = if (timer.status == TimerStatus.Overtime) {
-                "+${timer.displayMillis.formatClockTime()}"
-            } else {
-                timer.displayMillis.formatClockTime()
-            }
-            val baseline = centerY - ((textPaint.descent() + textPaint.ascent()) / 2f)
-            canvas.drawText(text, centerX, baseline, textPaint)
-        }
-
-        private fun drawStatusIndicator(canvas: Canvas, cx: Float, cy: Float, diameter: Float) {
-            val alpha = (indicatorAlpha * 255).toInt().coerceIn(0, 255)
-            val size = diameter * 0.4f
-            fillPaint.color = Color.argb(alpha, 255, 255, 255)
-            if (indicatorIsPause) {
-                val bw = size * 0.22f
-                val bh = size * 0.65f
-                val gap = size * 0.20f
-                canvas.drawRoundRect(cx - gap / 2f - bw, cy - bh / 2f, cx - gap / 2f, cy + bh / 2f, bw * 0.2f, bw * 0.2f, fillPaint)
-                canvas.drawRoundRect(cx + gap / 2f, cy - bh / 2f, cx + gap / 2f + bw, cy + bh / 2f, bw * 0.2f, bw * 0.2f, fillPaint)
-            } else {
-                val h = size * 0.65f
-                val w = h * 0.9f
-                indicatorPath.rewind()
-                indicatorPath.moveTo(cx - w * 0.3f, cy - h / 2f)
-                indicatorPath.lineTo(cx + w * 0.7f, cy)
-                indicatorPath.lineTo(cx - w * 0.3f, cy + h / 2f)
-                indicatorPath.close()
-                canvas.drawPath(indicatorPath, fillPaint)
-            }
-        }
-
-        private fun progressSpec(timer: TimerInstance): OverlayProgressSpec {
-            if (timer.status == TimerStatus.Overtime) {
-                return OverlayProgressSpec(1f, 0f, false, if (timer.settings.clockwiseModeEnabled) 1f else -1f)
-            }
-            val displayMs = timer.displayMillis
-            val useFullClock = timer.settings.fullClockMode && timer.status != TimerStatus.Idle
-            val sweepSign = if (timer.settings.clockwiseModeEnabled) 1f else -1f
-            if (useFullClock) {
-                val total = timer.selectedDurationMillis.coerceAtLeast(1L)
-                return OverlayProgressSpec((displayMs.toFloat() / total.toFloat()).coerceIn(0f, 1f), 0f, false, sweepSign)
-            }
-            return when {
-                displayMs >= ONE_HOUR_MILLIS * 2L -> OverlayProgressSpec(1f, 1f, true, sweepSign)
-                displayMs > ONE_HOUR_MILLIS -> OverlayProgressSpec(
-                    1f,
-                    ((displayMs - ONE_HOUR_MILLIS).toFloat() / ONE_HOUR_MILLIS).coerceIn(0f, 1f),
-                    true,
-                    sweepSign,
-                )
-                else -> OverlayProgressSpec((displayMs.toFloat() / ONE_HOUR_MILLIS).coerceIn(0f, 1f), 0f, false, sweepSign)
-            }
-        }
-
-        @Suppress("UNUSED_PARAMETER")
-        private fun overtimeAlpha(status: TimerStatus): Float = 1f
-
-        private fun accentColor(): Int = when (timer.status) {
-            TimerStatus.Paused -> pausedColor
-            TimerStatus.Overtime -> overtimeColor
-            else -> ringRed
-        }
-
-        private fun Int.withAlpha(alphaFactor: Float): Int {
-            val clamped = alphaFactor.coerceIn(0f, 1f)
-            return Color.argb(
-                (Color.alpha(this) * clamped).toInt(),
-                Color.red(this),
-                Color.green(this),
-                Color.blue(this),
-            )
-        }
-
-        private fun diameterPx(): Float = min(width, height).toFloat()
     }
 
     private class OverlayNameLabelView(context: Context) : View(context) {
@@ -1402,10 +1234,4 @@ object TimerOverlayManager {
         }
     }
 
-    private data class OverlayProgressSpec(
-        val primaryFraction: Float,
-        val overlayFraction: Float,
-        val showTwoLayer: Boolean,
-        val sweepSign: Float,
-    )
 }
