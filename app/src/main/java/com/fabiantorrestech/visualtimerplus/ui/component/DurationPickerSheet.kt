@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
@@ -45,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import com.fabiantorrestech.visualtimerplus.R
 import com.fabiantorrestech.visualtimerplus.timer.MAX_DURATION_MILLIS
 import com.fabiantorrestech.visualtimerplus.timer.clampDuration
+import com.fabiantorrestech.visualtimerplus.util.formatWallClockEndTime
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -194,6 +197,15 @@ private fun DurationTabContent(
         selectedField = if (selectedField == field) null else field
     }
 
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val ms = System.currentTimeMillis()
+            delay(1_000L - (ms % 1_000L))
+            nowMs = System.currentTimeMillis()
+        }
+    }
+
     val anyInput = hhDigits.isNotEmpty() || mmDigits.isNotEmpty() || ssDigits.isNotEmpty()
     val digitRows = listOf(
         listOf("1", "2", "3"),
@@ -280,7 +292,17 @@ private fun DurationTabContent(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
+                if (isValid()) {
+                    Text(
+                        text = "Ends at ${formatWallClockEndTime(nowMs + currentMillis(), showSeconds = true)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFF59E0B),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), shape = RoundedCornerShape(24.dp)) {
                         Text(stringResource(R.string.cancel))
@@ -355,7 +377,17 @@ private fun DurationTabContent(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+            if (isValid()) {
+                Text(
+                    text = "Ends at ${formatWallClockEndTime(nowMs + currentMillis(), showSeconds = true)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFF59E0B),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), shape = RoundedCornerShape(24.dp)) {
                     Text(stringResource(R.string.cancel))

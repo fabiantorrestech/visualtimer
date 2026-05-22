@@ -145,6 +145,7 @@ import com.fabiantorrestech.visualtimerplus.ui.component.PresetsSheet
 import com.fabiantorrestech.visualtimerplus.ui.component.QuickAdjustRow
 import com.fabiantorrestech.visualtimerplus.ui.component.TimerControls
 import com.fabiantorrestech.visualtimerplus.ui.component.VisualTimerCanvas
+import com.fabiantorrestech.visualtimerplus.util.formatApproxTime
 import com.fabiantorrestech.visualtimerplus.util.formatClockTime
 import com.fabiantorrestech.visualtimerplus.util.formatWallClockEndTime
 import kotlinx.coroutines.Dispatchers
@@ -691,7 +692,7 @@ private fun liveCountdownText(timer: TimerInstance, now: Long): String =
     when (timer.status) {
         TimerStatus.Running -> {
             val targetEndMillis = timer.targetEndTimeMillis ?: (now + timer.remainingMillis)
-            (targetEndMillis - now).coerceAtLeast(0L).formatClockTime()
+            (targetEndMillis - now).coerceAtLeast(0L).formatApproxTime()
         }
         TimerStatus.Overtime -> {
             val overtimeStartedAtMillis = timer.overtimeStartedAtMillis ?: now
@@ -876,8 +877,7 @@ private fun PortraitLayout(
                 }
             }
 
-            val showEndTime = timer.status != TimerStatus.Finished && effectiveDisplayMillis > 0L &&
-                (settings.showEndTimeEnabled || timer.status == TimerStatus.Idle)
+            val showEndTime = timer.status != TimerStatus.Finished && effectiveDisplayMillis > 0L
             AnimatedVisibility(
                 visible = showEndTime,
                 enter = fadeIn() + expandVertically(),
@@ -887,7 +887,7 @@ private fun PortraitLayout(
                     timer = timer,
                     clockPosition = settings.clockPosition,
                     textSizeSp = settings.endTimeSizeSp,
-                    showSeconds = settings.showEndTimeSecondsEnabled,
+                    showSeconds = true,
                     durationOverrideMillis = if (isDragging && isPreviewEditable) effectiveDurationForCommit else null,
                     modifier = Modifier.alpha(
                         if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f,
@@ -1181,8 +1181,7 @@ private fun LandscapeLayout(
                 }
             }
 
-            val showEndTimeLandscape = timer.status != TimerStatus.Finished && effectiveDisplayMillis > 0L &&
-                (settings.showEndTimeEnabled || timer.status == TimerStatus.Idle)
+            val showEndTimeLandscape = timer.status != TimerStatus.Finished && effectiveDisplayMillis > 0L
             AnimatedVisibility(
                 visible = showEndTimeLandscape,
                 enter = fadeIn() + expandVertically(),
@@ -1192,7 +1191,7 @@ private fun LandscapeLayout(
                     timer = timer,
                     clockPosition = settings.clockPosition,
                     textSizeSp = settings.endTimeSizeSp,
-                    showSeconds = settings.showEndTimeSecondsEnabled,
+                    showSeconds = true,
                     durationOverrideMillis = if (isDragging && isPreviewEditable) effectiveDurationForCommit else null,
                     modifier = Modifier.alpha(
                         if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f,
@@ -1514,15 +1513,19 @@ private fun HeroTimerCard(
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
+                val centerFontSizeSp = if (countdownText.count { it == ':' } >= 2)
+                    timer.settings.centerTimeSizeSp * 0.9f
+                else
+                    timer.settings.centerTimeSizeSp
                 Text(
                     text = countdownText,
                     style = MaterialTheme.typography.displaySmall.copy(
-                        fontSize = timer.settings.centerTimeSizeSp.sp,
-                        lineHeight = (timer.settings.centerTimeSizeSp * 1.2f).sp,
+                        fontSize = centerFontSizeSp.sp,
+                        lineHeight = (centerFontSizeSp * 1.2f).sp,
                         shadow = Shadow(
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                            offset = Offset(0f, 3f),
-                            blurRadius = 8f,
+                            color = Color.White.copy(alpha = 0.85f),
+                            offset = Offset.Zero,
+                            blurRadius = 6f,
                         ),
                     ),
                     color = MaterialTheme.colorScheme.onSurface,
@@ -2028,27 +2031,13 @@ private fun SettingsSheetContent(
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.show_end_time),
-                checked = settings.showEndTimeEnabled,
-                onCheckedChange = { onAction(TimerAction.SetShowEndTimeEnabled(it)) },
+            SizeSlider(
+                label = stringResource(R.string.end_time_size),
+                value = settings.endTimeSizeSp,
+                onValueChange = { onAction(TimerAction.SetEndTimeSizeSp(it)) },
+                valueRange = 14f..60f,
+                defaultValue = 32f,
             )
-            if (settings.showEndTimeEnabled) {
-                Spacer(modifier = Modifier.height(12.dp))
-                PreferenceToggle(
-                    label = stringResource(R.string.show_end_time_seconds),
-                    checked = settings.showEndTimeSecondsEnabled,
-                    onCheckedChange = { onAction(TimerAction.SetShowEndTimeSecondsEnabled(it)) },
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                SizeSlider(
-                    label = stringResource(R.string.end_time_size),
-                    value = settings.endTimeSizeSp,
-                    onValueChange = { onAction(TimerAction.SetEndTimeSizeSp(it)) },
-                    valueRange = 14f..60f,
-                    defaultValue = 32f,
-                )
-            }
             Spacer(modifier = Modifier.height(12.dp))
             SizeSlider(
                 label = stringResource(R.string.center_time_size),
@@ -2059,22 +2048,24 @@ private fun SettingsSheetContent(
             )
             Spacer(modifier = Modifier.height(12.dp))
             PreferenceToggle(
-                label = stringResource(R.string.clockwise_mode),
-                checked = settings.clockwiseModeEnabled,
-                onCheckedChange = { onAction(TimerAction.SetClockwiseModeEnabled(it)) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.show_direction_indicator),
-                checked = settings.showDirectionIndicator,
-                onCheckedChange = { onAction(TimerAction.SetShowDirectionIndicator(it)) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
                 label = stringResource(R.string.full_clock_mode),
                 checked = settings.fullClockMode,
                 onCheckedChange = { onAction(TimerAction.SetFullClockMode(it)) },
             )
+            if (!settings.fullClockMode) {
+                Spacer(modifier = Modifier.height(12.dp))
+                PreferenceToggle(
+                    label = stringResource(R.string.clockwise_mode),
+                    checked = settings.clockwiseModeEnabled,
+                    onCheckedChange = { onAction(TimerAction.SetClockwiseModeEnabled(it)) },
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                PreferenceToggle(
+                    label = stringResource(R.string.show_direction_indicator),
+                    checked = settings.showDirectionIndicator,
+                    onCheckedChange = { onAction(TimerAction.SetShowDirectionIndicator(it)) },
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
             PreferenceToggle(
                 label = stringResource(R.string.clean_mode),
@@ -2622,38 +2613,12 @@ private fun DefaultTimerSettingsSection(
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.show_end_time),
-            checked = draft.showEndTimeEnabled,
-            onCheckedChange = { draft = draft.copy(showEndTimeEnabled = it) },
-        )
-        if (draft.showEndTimeEnabled) {
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.show_end_time_seconds),
-                checked = draft.showEndTimeSecondsEnabled,
-                onCheckedChange = { draft = draft.copy(showEndTimeSecondsEnabled = it) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            SizeSlider(
-                label = stringResource(R.string.end_time_size),
-                value = draft.endTimeSizeSp,
-                onValueChange = { draft = draft.copy(endTimeSizeSp = it) },
-                valueRange = 14f..60f,
-                defaultValue = 32f,
-            )
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.clockwise_mode),
-            checked = draft.clockwiseModeEnabled,
-            onCheckedChange = { draft = draft.copy(clockwiseModeEnabled = it) },
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.show_direction_indicator),
-            checked = draft.showDirectionIndicator,
-            onCheckedChange = { draft = draft.copy(showDirectionIndicator = it) },
+        SizeSlider(
+            label = stringResource(R.string.end_time_size),
+            value = draft.endTimeSizeSp,
+            onValueChange = { draft = draft.copy(endTimeSizeSp = it) },
+            valueRange = 14f..60f,
+            defaultValue = 32f,
         )
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(
@@ -2661,6 +2626,20 @@ private fun DefaultTimerSettingsSection(
             checked = draft.fullClockMode,
             onCheckedChange = { draft = draft.copy(fullClockMode = it) },
         )
+        if (!draft.fullClockMode) {
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.clockwise_mode),
+                checked = draft.clockwiseModeEnabled,
+                onCheckedChange = { draft = draft.copy(clockwiseModeEnabled = it) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.show_direction_indicator),
+                checked = draft.showDirectionIndicator,
+                onCheckedChange = { draft = draft.copy(showDirectionIndicator = it) },
+            )
+        }
         Spacer(modifier = Modifier.height(12.dp))
         PreferenceToggle(
             label = stringResource(R.string.clean_mode),
