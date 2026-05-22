@@ -86,8 +86,12 @@ class TimerService : Service() {
                 }
             }
 
-            val intervalMs = state.notificationUpdateIntervalSeconds * 1000L
-            if (now - lastNotificationUpdateMs >= intervalMs) {
+            val configuredIntervalMs = state.notificationUpdateIntervalSeconds * 1000L
+            val anyInLastMinute = state.timers.any {
+                it.status == TimerStatus.Running && it.remainingMillis <= 60_000L
+            }
+            val effectiveIntervalMs = if (anyInLastMinute) minOf(15_000L, configuredIntervalMs) else configuredIntervalMs
+            if (now - lastNotificationUpdateMs >= effectiveIntervalMs) {
                 notificationManager.updateNotification(TimerRepository.getState())
                 lastNotificationUpdateMs = now
             }
@@ -596,7 +600,6 @@ class TimerService : Service() {
         const val EXTRA_TIMER_INDEX = "timer_index"
         const val EXTRA_ADJUST_DELTA_MILLIS = "adjust_delta_millis"
 
-        private const val TICK_INTERVAL_MILLIS = 250L
-        // Notification refresh rate is now user-configurable; this constant is unused.
+        private const val TICK_INTERVAL_MILLIS = 1000L
     }
 }

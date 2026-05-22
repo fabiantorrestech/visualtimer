@@ -1,7 +1,7 @@
 package com.fabiantorrestech.visualtimerplus.timer
 
 const val MAX_DURATION_MILLIS = 99L * 3600L * 1000L
-const val MAX_TIMERS = 20
+const val MAX_TIMERS = 5
 const val DRAG_MAX_MILLIS = 2L * 3600L * 1000L
 const val ONE_HOUR_MILLIS = 3600_000L
 const val DURATION_STEP_MILLIS = 60_000L

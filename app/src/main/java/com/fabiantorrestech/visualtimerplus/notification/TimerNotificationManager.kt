@@ -141,6 +141,7 @@ class TimerNotificationManager(
             .setOngoing(activeTimer.status != TimerStatus.Idle)
             .setOnlyAlertOnce(true)
             .setAutoCancel(false)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setContentIntent(contentPendingIntent(state.activeTimerIndex))
 
         when (activeTimer.status) {
@@ -209,6 +210,7 @@ class TimerNotificationManager(
             .setOngoing(timer.status != TimerStatus.Idle)
             .setOnlyAlertOnce(true)
             .setAutoCancel(false)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setContentIntent(contentPendingIntent(timer.id))
             .setGroup("timer_${timer.id}")
 

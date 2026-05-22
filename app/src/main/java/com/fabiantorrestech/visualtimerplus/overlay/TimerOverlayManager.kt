@@ -14,7 +14,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
@@ -926,15 +925,33 @@ object TimerOverlayManager {
         private var indicatorAlpha: Float = 0f
         private var indicatorIsPause: Boolean = true
         private var indicatorAnimator: ValueAnimator? = null
+        private var lastDisplayBucket: Long = Long.MIN_VALUE
 
         fun render(timer: TimerInstance, style: OverlayStyle, overlaySize: OverlaySize) {
+            val newBucket = computeDisplayBucket(timer, style, overlaySize)
+            val changed = newBucket != lastDisplayBucket
             if (indicatorIsPause && indicatorAlpha > 0f && timer.status == TimerStatus.Running) {
                 clearStatusIndicator()
             }
             this.timer = timer
             this.style = style
             this.overlaySize = overlaySize
-            invalidate()
+            if (changed) {
+                lastDisplayBucket = newBucket
+                invalidate()
+            }
+        }
+
+        private fun computeDisplayBucket(timer: TimerInstance, style: OverlayStyle, overlaySize: OverlaySize): Long {
+            val timeBucket = when {
+                timer.status == TimerStatus.Overtime -> timer.remainingMillis / 15_000L
+                timer.remainingMillis > 60_000L -> timer.remainingMillis / 60_000L
+                else -> timer.remainingMillis / 15_000L
+            }
+            return timeBucket * 1_000_000L +
+                timer.status.ordinal * 1_000L +
+                style.ordinal * 10L +
+                overlaySize.ordinal.toLong()
         }
 
         fun showStatusIndicator(isPaused: Boolean) {
@@ -984,8 +1001,6 @@ object TimerOverlayManager {
             drawCenteredText(canvas, centerX, centerY, diameter)
 
             if (indicatorAlpha > 0f) drawStatusIndicator(canvas, centerX, centerY, diameter)
-
-            if (timer.status == TimerStatus.Overtime) postInvalidateOnAnimation()
         }
 
         private fun drawRingStyle(
@@ -1109,11 +1124,8 @@ object TimerOverlayManager {
             }
         }
 
-        private fun overtimeAlpha(status: TimerStatus): Float {
-            if (status != TimerStatus.Overtime) return 1f
-            val phase = (SystemClock.uptimeMillis() % 1200L) / 1200f
-            return 0.35f + (0.65f * (1f - abs((phase * 2f) - 1f)))
-        }
+        @Suppress("UNUSED_PARAMETER")
+        private fun overtimeAlpha(status: TimerStatus): Float = 1f
 
         private fun accentColor(): Int = when (timer.status) {
             TimerStatus.Paused -> pausedColor

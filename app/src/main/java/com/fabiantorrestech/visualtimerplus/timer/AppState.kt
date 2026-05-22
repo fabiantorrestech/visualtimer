@@ -18,7 +18,7 @@ data class AppState(
     val confirmSwipeDelete: Boolean = true,
     val defaultDurationMillis: Long = 0L,
     val tapToToggleMinimalMode: Boolean = true,
-    val notificationUpdateIntervalSeconds: Int = 15,
+    val notificationUpdateIntervalSeconds: Int = 60,
     val overlayEnabled: Boolean = true,
     val overlaySize: OverlaySize = OverlaySize.Medium,
     val overlayStyle: OverlayStyle = OverlayStyle.Ring,
