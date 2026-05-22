@@ -7,6 +7,7 @@
 
     <!-- Header: back arrow + timer name -->
     <LinearLayout
+        android:id="@+id/headerBar"
         android:layout_width="match_parent"
         android:layout_height="64dp"
         android:orientation="horizontal"
@@ -51,6 +52,7 @@
     </LinearLayout>
 
     <View
+        android:id="@+id/headerDivider"
         android:layout_width="match_parent"
         android:layout_height="2dp"
         android:background="#000000"/>
@@ -61,7 +63,9 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="#FFFFFF"/>
+        android:background="#FFFFFF"
+        android:clickable="true"
+        android:focusable="true"/>
 
     <TextView
         android:id="@+id/endTimeText"
@@ -75,12 +79,14 @@
         android:visibility="invisible"/>
 
     <View
+        android:id="@+id/controlsDivider"
         android:layout_width="match_parent"
         android:layout_height="2dp"
         android:background="#000000"/>
 
     <!-- Control row -->
     <LinearLayout
+        android:id="@+id/controlsBar"
         android:layout_width="match_parent"
         android:layout_height="72dp"
         android:orientation="horizontal">

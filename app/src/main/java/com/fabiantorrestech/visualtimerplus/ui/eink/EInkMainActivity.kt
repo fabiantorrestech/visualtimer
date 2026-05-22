@@ -60,11 +60,14 @@ class EInkMainActivity : ComponentActivity() {
             openTimer(newIndex)
         }
 
+        val prefs = getSharedPreferences("visual_timer_prefs", MODE_PRIVATE)
+
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 var lastBuckets = emptyList<Long>()
                 TimerRepository.state.collect { state ->
-                    val newBuckets = state.timers.map { timerDisplayBucket(it) }
+                    val intervalSec = prefs.getString(EInkSettingsActivity.PREF_UPDATE_INTERVAL, EInkSettingsActivity.DEFAULT_UPDATE_INTERVAL)?.toLongOrNull() ?: 15L
+                    val newBuckets = state.timers.map { timerDisplayBucket(it, intervalSec) }
                     if (newBuckets.size != lastBuckets.size) {
                         adapter.setTimers(state.timers)
                     } else {
@@ -124,13 +127,13 @@ class EInkMainActivity : ComponentActivity() {
     }
 }
 
-private fun timerDisplayBucket(timer: TimerInstance): Long {
-    val timeBucket = when {
-        timer.status == TimerStatus.Overtime -> timer.remainingMillis / 15_000L
-        timer.remainingMillis > 60_000L -> timer.remainingMillis / 60_000L
-        else -> timer.remainingMillis / 15_000L
+private fun timerDisplayBucket(timer: TimerInstance, intervalSeconds: Long = 15L): Long {
+    val intervalMs = if (timer.status == TimerStatus.Running && timer.remainingMillis < 60_000L) {
+        1_000L
+    } else {
+        intervalSeconds * 1_000L
     }
-    return timeBucket * 10L + timer.status.ordinal
+    return (timer.remainingMillis / intervalMs) * 10L + timer.status.ordinal
 }
 
 private class TimerListAdapter(

@@ -1836,6 +1836,13 @@ private fun SettingsSheetContent(
                 checked = appState.tapToToggleMinimalMode,
                 onCheckedChange = { onAction(TimerAction.SetTapToToggleMinimalMode(it)) },
             )
+            PreferenceToggle(
+                label = "Real-time UI updates",
+                description = "Coming soon",
+                checked = false,
+                onCheckedChange = {},
+                enabled = false,
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -2779,9 +2786,12 @@ private fun PreferenceToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     description: String? = null,
+    enabled: Boolean = true,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.4f),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -2796,7 +2806,7 @@ private fun PreferenceToggle(
             }
         }
         Spacer(modifier = Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
     }
 }
 

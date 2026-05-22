@@ -96,7 +96,7 @@ class EInkSetTimeActivity : ComponentActivity() {
         val durationMs = (hours * 3600L + minutes * 60L + seconds) * 1000L
         if (durationMs > 0L) {
             endsAtText.visibility = View.VISIBLE
-            endsAtText.text = "ENDS AT ${formatEndTimeFromNow(durationMs, showSeconds = true)}"
+            endsAtText.text = "ENDS AT ~${formatEndTimeFromNow(durationMs, showSeconds = true)}"
         } else {
             endsAtText.visibility = View.INVISIBLE
         }

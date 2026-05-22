@@ -18,6 +18,7 @@ class EInkSettingsActivity : ComponentActivity() {
     private lateinit var clockwiseValue: TextView
     private lateinit var elapsedModeValue: TextView
     private lateinit var keepAwakeValue: TextView
+    private lateinit var updateIntervalValue: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,6 +32,7 @@ class EInkSettingsActivity : ComponentActivity() {
         clockwiseValue = findViewById(R.id.clockwiseValue)
         elapsedModeValue = findViewById(R.id.elapsedModeValue)
         keepAwakeValue = findViewById(R.id.keepAwakeValue)
+        updateIntervalValue = findViewById(R.id.updateIntervalValue)
 
         updateDisplayValues()
 
@@ -61,6 +63,14 @@ class EInkSettingsActivity : ComponentActivity() {
             updateDisplayValues()
         }
 
+        findViewById<RelativeLayout>(R.id.updateIntervalRow).setOnClickListener {
+            val current = prefs.getString(PREF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL) ?: DEFAULT_UPDATE_INTERVAL
+            val idx = UPDATE_INTERVALS.indexOf(current)
+            val next = UPDATE_INTERVALS[(idx + 1) % UPDATE_INTERVALS.size]
+            prefs.edit().putString(PREF_UPDATE_INTERVAL, next).apply()
+            updateDisplayValues()
+        }
+
         applyKeepAwake(prefs.getBoolean(PREF_KEEP_AWAKE, true))
     }
 
@@ -78,6 +88,8 @@ class EInkSettingsActivity : ComponentActivity() {
         clockwiseValue.text = if (prefs.getBoolean(PREF_CLOCKWISE, true)) "CW" else "CCW"
         elapsedModeValue.text = if (prefs.getString(PREF_ELAPSED_MODE, MODE_BLINK) == MODE_BLINK) "BLINK" else "EXCLAMATION"
         keepAwakeValue.text = if (prefs.getBoolean(PREF_KEEP_AWAKE, true)) "ON" else "OFF"
+        val interval = prefs.getString(PREF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL) ?: DEFAULT_UPDATE_INTERVAL
+        updateIntervalValue.text = if (interval == "60") "1M" else "${interval}S"
     }
 
     companion object {
@@ -85,6 +97,9 @@ class EInkSettingsActivity : ComponentActivity() {
         const val PREF_ELAPSED_MODE = "eink_elapsed_mode"
         const val PREF_KEEP_AWAKE = "eink_keep_screen_awake"
         const val PREF_CLOCKWISE = "eink_clockwise"
+        const val PREF_UPDATE_INTERVAL = "eink_update_interval"
+        const val DEFAULT_UPDATE_INTERVAL = "15"
+        val UPDATE_INTERVALS = listOf("5", "10", "15", "30", "60")
         const val MODE_BARS = "bars"
         const val MODE_RADIAL = "radial"
         const val MODE_BLINK = "blink"

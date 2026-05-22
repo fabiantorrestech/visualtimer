@@ -35,6 +35,11 @@ class EInkActiveTimerActivity : ComponentActivity() {
     private lateinit var startPauseButton: TextView
     private lateinit var resetButton: TextView
     private lateinit var setTimeButton: TextView
+    private lateinit var headerBar: View
+    private lateinit var headerDivider: View
+    private lateinit var controlsDivider: View
+    private lateinit var controlsBar: View
+    private var isUiVisible = true
 
     private val blinkHandler = Handler(Looper.getMainLooper())
     private var blinkTick = false
@@ -103,6 +108,12 @@ class EInkActiveTimerActivity : ComponentActivity() {
         startPauseButton = findViewById(R.id.startPauseButton)
         resetButton = findViewById(R.id.resetButton)
         setTimeButton = findViewById(R.id.setTimeButton)
+        headerBar = findViewById(R.id.headerBar)
+        headerDivider = findViewById(R.id.headerDivider)
+        controlsDivider = findViewById(R.id.controlsDivider)
+        controlsBar = findViewById(R.id.controlsBar)
+
+        timerView.setOnClickListener { toggleUi() }
 
         findViewById<TextView>(R.id.backButton).setOnClickListener { finish() }
 
@@ -137,6 +148,8 @@ class EInkActiveTimerActivity : ComponentActivity() {
             )
         }
 
+        val prefs = getSharedPreferences("visual_timer_prefs", MODE_PRIVATE)
+
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 var lastBucket = Long.MIN_VALUE
@@ -148,14 +161,18 @@ class EInkActiveTimerActivity : ComponentActivity() {
                         return@collect
                     }
 
-                    if (timer.status == TimerStatus.Overtime && prevStatus != TimerStatus.Overtime) {
+                    val isElapsed = timer.status == TimerStatus.Overtime || timer.status == TimerStatus.Finished
+                    val wasElapsed = prevStatus == TimerStatus.Overtime || prevStatus == TimerStatus.Finished
+                    if (isElapsed && !wasElapsed) {
+                        setUiVisible(true)
                         startBlinking()
-                    } else if (timer.status != TimerStatus.Overtime && prevStatus == TimerStatus.Overtime) {
+                    } else if (!isElapsed && wasElapsed) {
                         stopBlinking()
                     }
                     prevStatus = timer.status
 
-                    val bucket = einkTimerBucket(timer)
+                    val intervalSec = prefs.getString(EInkSettingsActivity.PREF_UPDATE_INTERVAL, EInkSettingsActivity.DEFAULT_UPDATE_INTERVAL)?.toLongOrNull() ?: 15L
+                    val bucket = einkTimerBucket(timer, intervalSec)
                     val controlsChanged = timer.status.ordinal != (lastBucket % 10).toInt()
                     if (bucket != lastBucket) {
                         lastBucket = bucket
@@ -212,6 +229,19 @@ class EInkActiveTimerActivity : ComponentActivity() {
             }
             .setNegativeButton("CANCEL", null)
             .show()
+    }
+
+    private fun setUiVisible(visible: Boolean) {
+        isUiVisible = visible
+        val vis = if (visible) View.VISIBLE else View.GONE
+        headerBar.visibility = vis
+        headerDivider.visibility = vis
+        controlsDivider.visibility = vis
+        controlsBar.visibility = vis
+    }
+
+    private fun toggleUi() {
+        setUiVisible(!isUiVisible)
     }
 
     private fun updateEndTime(timer: TimerInstance) {
@@ -273,13 +303,13 @@ class EInkActiveTimerActivity : ComponentActivity() {
         const val EXTRA_TIMER_INDEX = "timer_index"
         private const val REQUEST_SET_TIME = 1001
 
-        fun einkTimerBucket(timer: TimerInstance): Long {
-            val timeBucket = when {
-                timer.status == TimerStatus.Overtime -> timer.remainingMillis / 15_000L
-                timer.remainingMillis > 60_000L -> timer.remainingMillis / 60_000L
-                else -> timer.remainingMillis / 15_000L
+        fun einkTimerBucket(timer: TimerInstance, intervalSeconds: Long = 15L): Long {
+            val intervalMs = if (timer.status == TimerStatus.Running && timer.remainingMillis < 60_000L) {
+                1_000L
+            } else {
+                intervalSeconds * 1_000L
             }
-            return timeBucket * 10L + timer.status.ordinal
+            return (timer.remainingMillis / intervalMs) * 10L + timer.status.ordinal
         }
     }
 }

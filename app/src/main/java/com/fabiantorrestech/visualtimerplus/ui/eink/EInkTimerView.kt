@@ -36,10 +36,6 @@ class EInkTimerView @JvmOverloads constructor(
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
     }
-    private val statusBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 2.5f
-    }
     private val ringOval = RectF()
 
     private var timeText: String = "00:00"
@@ -71,7 +67,10 @@ class EInkTimerView @JvmOverloads constructor(
 
     fun update(timer: TimerInstance) {
         timeText = when (timer.status) {
-            TimerStatus.Running -> timer.displayMillis.formatApproxTime()
+            TimerStatus.Running -> if (timer.remainingMillis < 60_000L)
+                timer.displayMillis.formatClockTime()
+            else
+                timer.displayMillis.formatApproxTime()
             TimerStatus.Overtime -> "+${timer.displayMillis.formatClockTime()}"
             else -> timer.displayMillis.formatClockTime()
         }
@@ -111,11 +110,11 @@ class EInkTimerView @JvmOverloads constructor(
         if (displayMode == EInkSettingsActivity.MODE_RADIAL) {
             drawRadial(canvas, w, h, fg, bg, showExclamation)
         } else {
-            drawBars(canvas, w, h, fg, showExclamation)
+            drawBars(canvas, w, h, fg, bg, showExclamation)
         }
     }
 
-    private fun drawBars(canvas: Canvas, w: Float, h: Float, fg: Int, showExclamation: Boolean) {
+    private fun drawBars(canvas: Canvas, w: Float, h: Float, fg: Int, bg: Int, showExclamation: Boolean) {
         textPaint.color = fg
 
         if (showExclamation) {
@@ -135,16 +134,12 @@ class EInkTimerView @JvmOverloads constructor(
         textPaint.textSize = statusTextSize
         val statusCY = h * 0.56f
         val statusBaseline = statusCY - (textPaint.descent() + textPaint.ascent()) / 2f
-        val statusW = textPaint.measureText(statusText)
-        val sPad = statusTextSize * 0.30f
-        statusBorderPaint.color = fg
-        canvas.drawRect(
-            w / 2f - statusW / 2f - sPad,
-            statusBaseline + textPaint.ascent() - sPad,
-            w / 2f + statusW / 2f + sPad,
-            statusBaseline + textPaint.descent() + sPad,
-            statusBorderPaint,
-        )
+        textPaint.style = Paint.Style.STROKE
+        textPaint.strokeWidth = statusTextSize * 0.15f
+        textPaint.color = bg
+        canvas.drawText(statusText, w / 2f, statusBaseline, textPaint)
+        textPaint.style = Paint.Style.FILL
+        textPaint.color = fg
         canvas.drawText(statusText, w / 2f, statusBaseline, textPaint)
 
         val blockCount = 20
@@ -240,23 +235,17 @@ class EInkTimerView @JvmOverloads constructor(
             canvas.drawText(timeText, centerX, timeBaseline, textPaint)
         }
 
-        // Status label with border box
+        // Status label with letter outline
         val statusTextSize = (w * 0.065f).coerceAtMost(h * 0.085f)
         textPaint.textSize = statusTextSize
-        textPaint.style = Paint.Style.FILL
-        textPaint.color = fg
         val statusCY = h * 0.82f
         val statusBaseline = statusCY - (textPaint.descent() + textPaint.ascent()) / 2f
-        val statusW = textPaint.measureText(statusText)
-        val sPad = statusTextSize * 0.30f
-        statusBorderPaint.color = fg
-        canvas.drawRect(
-            centerX - statusW / 2f - sPad,
-            statusBaseline + textPaint.ascent() - sPad,
-            centerX + statusW / 2f + sPad,
-            statusBaseline + textPaint.descent() + sPad,
-            statusBorderPaint,
-        )
+        textPaint.style = Paint.Style.STROKE
+        textPaint.strokeWidth = statusTextSize * 0.15f
+        textPaint.color = bg
+        canvas.drawText(statusText, centerX, statusBaseline, textPaint)
+        textPaint.style = Paint.Style.FILL
+        textPaint.color = fg
         canvas.drawText(statusText, centerX, statusBaseline, textPaint)
     }
 }
