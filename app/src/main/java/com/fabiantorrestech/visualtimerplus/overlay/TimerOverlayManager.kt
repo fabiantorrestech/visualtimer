@@ -86,7 +86,7 @@ object TimerOverlayManager {
         override fun run() {
             overlayBlinkTick = !overlayBlinkTick
             overlayView?.setBlinkTick(overlayBlinkTick, cachedElapsedMode)
-            overlayBlinkHandler.postDelayed(this, 2500L)
+            overlayBlinkHandler.postDelayed(this, 2000L)
         }
     }
 

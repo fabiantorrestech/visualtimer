@@ -1,6 +1,8 @@
 package com.fabiantorrestech.visualtimerplus.ui.eink
 
 import android.app.AlertDialog
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -15,14 +17,24 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.fabiantorrestech.visualtimerplus.R
+import com.fabiantorrestech.visualtimerplus.db.ScheduledTimerEntity
+import com.fabiantorrestech.visualtimerplus.db.ScheduledTimerOutcome
+import com.fabiantorrestech.visualtimerplus.db.ScheduledTimerTimingMode
+import com.fabiantorrestech.visualtimerplus.db.ScheduledTimerType
 import com.fabiantorrestech.visualtimerplus.timer.TimerAction
 import com.fabiantorrestech.visualtimerplus.timer.TimerController
 import com.fabiantorrestech.visualtimerplus.timer.TimerInstance
 import com.fabiantorrestech.visualtimerplus.overlay.TimerOverlayManager
 import com.fabiantorrestech.visualtimerplus.timer.TimerRepository
 import com.fabiantorrestech.visualtimerplus.timer.TimerStatus
+import com.fabiantorrestech.visualtimerplus.schedule.ScheduledTimerManager
 import com.fabiantorrestech.visualtimerplus.util.formatEndTimeFromNow
+import com.fabiantorrestech.visualtimerplus.util.formatWallClockEndTime
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
+import java.util.Calendar
 
 class EInkActiveTimerActivity : ComponentActivity() {
 
@@ -40,6 +52,8 @@ class EInkActiveTimerActivity : ComponentActivity() {
     private lateinit var controlsDivider: View
     private lateinit var controlsBar: View
     private var isUiVisible = true
+    private lateinit var scheduleButton: TextView
+    private var pendingScheduledEpochMs: Long? = null
 
     private val blinkHandler = Handler(Looper.getMainLooper())
     private var blinkTick = false
@@ -48,7 +62,7 @@ class EInkActiveTimerActivity : ComponentActivity() {
         override fun run() {
             blinkTick = !blinkTick
             timerView.setBlinkTick(blinkTick)
-            blinkHandler.postDelayed(this, 2500L)
+            blinkHandler.postDelayed(this, 2000L)
         }
     }
 
@@ -112,6 +126,9 @@ class EInkActiveTimerActivity : ComponentActivity() {
         headerDivider = findViewById(R.id.headerDivider)
         controlsDivider = findViewById(R.id.controlsDivider)
         controlsBar = findViewById(R.id.controlsBar)
+
+        scheduleButton = findViewById(R.id.scheduleButton)
+        scheduleButton.setOnClickListener { showSchedulePicker() }
 
         timerView.setOnClickListener { toggleUi() }
 
@@ -231,6 +248,58 @@ class EInkActiveTimerActivity : ComponentActivity() {
             .show()
     }
 
+    private fun showSchedulePicker() {
+        val timer = TimerRepository.getTimer(timerIndex)
+        if (timer.status != TimerStatus.Idle || timer.selectedDurationMillis <= 0L) return
+        val now = Calendar.getInstance()
+        DatePickerDialog(
+            this,
+            { _, year, month, day ->
+                TimePickerDialog(
+                    this,
+                    { _, hour, minute ->
+                        val cal = Calendar.getInstance().apply {
+                            set(year, month, day, hour, minute, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }
+                        val epochMs = cal.timeInMillis
+                        if (epochMs <= System.currentTimeMillis()) return@TimePickerDialog
+                        pendingScheduledEpochMs = epochMs
+                        val name = TimerRepository.getTimer(timerIndex).activeTimerName.ifBlank { "Timer ${timerIndex + 1}" }
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val zoneId = ZoneId.systemDefault()
+                            val localDate = Instant.ofEpochMilli(epochMs).atZone(zoneId).toLocalDate()
+                            val localTime = Instant.ofEpochMilli(epochMs).atZone(zoneId).toLocalTime()
+                            val entity = ScheduledTimerEntity(
+                                name = name,
+                                type = ScheduledTimerType.OneTime.name,
+                                oneTimeDateEpochDay = localDate.toEpochDay(),
+                                weekdayMask = 0,
+                                startTimeMinutes = localTime.hour * 60 + localTime.minute,
+                                timingMode = ScheduledTimerTimingMode.Duration.name,
+                                durationMillis = timer.selectedDurationMillis,
+                                lastOutcome = ScheduledTimerOutcome.None.name,
+                            )
+                            ScheduledTimerManager.upsertSchedule(this@EInkActiveTimerActivity, entity)
+                        }
+                        updateScheduledDisplay(epochMs)
+                    },
+                    now.get(Calendar.HOUR_OF_DAY),
+                    now.get(Calendar.MINUTE),
+                    true,
+                ).show()
+            },
+            now.get(Calendar.YEAR),
+            now.get(Calendar.MONTH),
+            now.get(Calendar.DAY_OF_MONTH),
+        ).show()
+    }
+
+    private fun updateScheduledDisplay(epochMs: Long) {
+        endTimeText.visibility = View.VISIBLE
+        endTimeText.text = "SCHED ~${formatWallClockEndTime(epochMs)}"
+    }
+
     private fun setUiVisible(visible: Boolean) {
         isUiVisible = visible
         val vis = if (visible) View.VISIBLE else View.GONE
@@ -245,6 +314,15 @@ class EInkActiveTimerActivity : ComponentActivity() {
     }
 
     private fun updateEndTime(timer: TimerInstance) {
+        // Show pending schedule label when Idle with a future schedule set
+        val scheduledMs = pendingScheduledEpochMs
+        if (timer.status == TimerStatus.Idle && scheduledMs != null && scheduledMs > System.currentTimeMillis()) {
+            updateScheduledDisplay(scheduledMs)
+            return
+        }
+        // Clear stale schedule if timer left Idle state
+        if (timer.status != TimerStatus.Idle) pendingScheduledEpochMs = null
+
         val show = timer.status != TimerStatus.Finished &&
                 timer.status != TimerStatus.Overtime &&
                 timer.remainingMillis > 0L
@@ -266,6 +344,10 @@ class EInkActiveTimerActivity : ComponentActivity() {
         val canSet = timer.status == TimerStatus.Idle || timer.status == TimerStatus.Paused
         setTimeButton.alpha = if (canSet) 1f else 0.3f
         setTimeButton.isEnabled = canSet
+
+        val canSchedule = timer.status == TimerStatus.Idle && timer.selectedDurationMillis > 0L
+        scheduleButton.alpha = if (canSchedule) 1f else 0.3f
+        scheduleButton.isEnabled = canSchedule
 
         when (timer.status) {
             TimerStatus.Idle -> {
