@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.widthIn
@@ -201,6 +202,7 @@ private fun QuickTimerPopup(
     }
 
     fun attemptStart(durationMillis: Long, presetId: Long?, name: String) {
+        if (durationMillis <= 0L) return
         if (TimerRepository.state.value.findNextAvailableTimerSlot() == null) {
             errorMessage = maxTimersError
             return
@@ -262,6 +264,7 @@ private fun QuickTimerPopup(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .then(if (isLandscape) Modifier.fillMaxHeight() else Modifier)
                     .then(
                         if (isLandscape) {
                             Modifier.statusBarsPadding().navigationBarsPadding()
@@ -272,51 +275,12 @@ private fun QuickTimerPopup(
                     .imePadding()
                     .padding(horizontal = 20.dp, vertical = 16.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(R.string.quick_timer_title),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val openAppDescription = stringResource(R.string.quick_timer_open_app)
-                        IconButton(
-                            onClick = onOpenApp,
-                            modifier = Modifier.semantics {
-                                contentDescription = openAppDescription
-                            },
-                        ) {
-                            AndroidView(
-                                factory = { viewContext ->
-                                    ImageView(viewContext).apply {
-                                        scaleType = ImageView.ScaleType.FIT_CENTER
-                                        setImageResource(R.mipmap.ic_launcher)
-                                        contentDescription = null
-                                    }
-                                },
-                                modifier = Modifier.size(22.dp),
-                            )
-                        }
-                        IconButton(onClick = onDismiss) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_close),
-                                contentDescription = stringResource(R.string.cancel),
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                NameField(
-                    name = timerName,
-                    onNameChange = { timerName = it },
+                QuickTimerHeader(
+                    isLandscape = isLandscape,
+                    timerName = timerName,
+                    onTimerNameChange = { timerName = it },
+                    onOpenApp = onOpenApp,
+                    onDismiss = onDismiss,
                 )
 
                 if (errorMessage != null) {
@@ -328,7 +292,7 @@ private fun QuickTimerPopup(
                     )
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(if (isLandscape) 10.dp else 12.dp))
 
                 TabRow(
                     selectedTabIndex = selectedTab,
@@ -350,9 +314,9 @@ private fun QuickTimerPopup(
                     modifier = if (isLandscape) {
                         Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 320.dp, max = 420.dp)
+                            .weight(1f)
                     } else {
-                        Modifier.heightIn(min = 220.dp, max = 300.dp)
+                        Modifier.fillMaxWidth()
                     },
                 ) {
                     when (selectedTab) {
@@ -385,14 +349,90 @@ private fun QuickTimerPopup(
 private fun NameField(
     name: String,
     onNameChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
         value = name,
         onValueChange = onNameChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         label = { Text(stringResource(R.string.quick_timer_name_hint)) },
         singleLine = true,
     )
+}
+
+@Composable
+private fun QuickTimerHeader(
+    isLandscape: Boolean,
+    timerName: String,
+    onTimerNameChange: (String) -> Unit,
+    onOpenApp: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = if (isLandscape) Alignment.Top else Alignment.CenterVertically,
+    ) {
+        if (isLandscape) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.quick_timer_title),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                NameField(
+                    name = timerName,
+                    onNameChange = onTimerNameChange,
+                    modifier = Modifier.widthIn(max = 340.dp),
+                )
+            }
+        } else {
+            Text(
+                text = stringResource(R.string.quick_timer_title),
+                style = MaterialTheme.typography.titleLarge,
+            )
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val openAppDescription = stringResource(R.string.quick_timer_open_app)
+            IconButton(
+                onClick = onOpenApp,
+                modifier = Modifier.semantics {
+                    contentDescription = openAppDescription
+                },
+            ) {
+                AndroidView(
+                    factory = { viewContext ->
+                        ImageView(viewContext).apply {
+                            scaleType = ImageView.ScaleType.FIT_CENTER
+                            setImageResource(R.mipmap.ic_launcher)
+                            contentDescription = null
+                        }
+                    },
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_close),
+                    contentDescription = stringResource(R.string.cancel),
+                )
+            }
+        }
+    }
+
+    if (!isLandscape) {
+        Spacer(Modifier.height(8.dp))
+        NameField(
+            name = timerName,
+            onNameChange = onTimerNameChange,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -458,71 +498,43 @@ private fun QuickDialTabContent(
     val displayDuration = previewDuration ?: customDuration
 
     if (isLandscape) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            // Left: time display
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(
-                            text = if (displayDuration == 0L) "--:--" else displayDuration.formatClockTime(),
-                            style = MaterialTheme.typography.displaySmall,
-                            color = if (displayDuration == 0L)
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            else
-                                MaterialTheme.colorScheme.onSurface,
-                            textAlign = TextAlign.Center,
-                        )
-                        if (displayDuration > 0L) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            QuickTimerEndTimeText(
-                                durationMillis = displayDuration,
-                                showSeconds = showEndTimeSecondsEnabled,
-                            )
-                        }
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .weight(0.9f)
-                        .aspectRatio(1f),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    QuickTimerDial(
-                        durationMillis = customDuration,
-                        onDurationChanged = onDurationChanged,
-                        showLabel = false,
-                        clockwiseModeEnabled = clockwiseModeEnabled,
-                        isOledMode = isOledMode,
-                        modifier = Modifier.fillMaxSize(),
+                Text(
+                    text = if (displayDuration == 0L) "--:--" else displayDuration.formatClockTime(),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = if (displayDuration == 0L)
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    else
+                        MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Start,
+                )
+                if (displayDuration > 0L) {
+                    QuickTimerEndTimeText(
+                        durationMillis = displayDuration,
+                        showSeconds = showEndTimeSecondsEnabled,
                     )
                 }
             }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            // Middle: buttons
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedButton(
                     onClick = { showPicker = true },
                     modifier = Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
                         .heightIn(min = 44.dp),
                     contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
                 ) {
@@ -533,13 +545,25 @@ private fun QuickDialTabContent(
                 }
                 Button(
                     onClick = onStart,
-                    enabled = customDuration > 0L,
                     modifier = Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
                         .heightIn(min = 44.dp),
                 ) {
                     Text(text = stringResource(R.string.quick_timer_start))
                 }
+            }
+            // Right: dial
+            Box(contentAlignment = Alignment.Center) {
+                QuickTimerDial(
+                    durationMillis = customDuration,
+                    onDurationChanged = onDurationChanged,
+                    showLabel = false,
+                    clockwiseModeEnabled = clockwiseModeEnabled,
+                    isOledMode = isOledMode,
+                    modifier = Modifier
+                        .sizeIn(maxWidth = 160.dp, maxHeight = 160.dp)
+                        .aspectRatio(1f),
+                )
             }
         }
     } else {
