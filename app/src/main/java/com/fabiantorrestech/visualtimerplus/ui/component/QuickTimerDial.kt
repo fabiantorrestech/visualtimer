@@ -3,6 +3,7 @@ package com.fabiantorrestech.visualtimerplus.ui.component
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -53,7 +54,7 @@ fun QuickTimerDial(
     }
 
     Box(
-        modifier = modifier,
+        modifier = modifier.aspectRatio(1f),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(
@@ -80,10 +81,21 @@ fun QuickTimerDial(
                     )
                 },
         ) {
-            val strokeWidth = size.minDimension * 0.1f
+            val canvasSide = size.minDimension
+            val squareTopLeft = Offset(
+                x = (size.width - canvasSide) / 2f,
+                y = (size.height - canvasSide) / 2f,
+            )
+            val squareSize = Size(canvasSide, canvasSide)
+            val squareCenter = Offset(
+                x = squareTopLeft.x + canvasSide / 2f,
+                y = squareTopLeft.y + canvasSide / 2f,
+            )
+
+            val strokeWidth = canvasSide * 0.1f
             val padding = strokeWidth
-            val arcTopLeft = Offset(padding, padding)
-            val arcSize = Size(size.width - padding * 2f, size.height - padding * 2f)
+            val arcTopLeft = Offset(squareTopLeft.x + padding, squareTopLeft.y + padding)
+            val arcSize = Size(canvasSide - padding * 2f, canvasSide - padding * 2f)
 
             // Background track
             drawArc(
@@ -97,13 +109,14 @@ fun QuickTimerDial(
             )
 
             val cueStroke = strokeWidth * 0.34f
-            val cueRadius = (size.minDimension / 2f) - (cueStroke * 0.55f)
+            val trackOuterRadius = (canvasSide / 2f) - padding
+            val cueRadius = trackOuterRadius + strokeWidth * 0.72f
             val cueSweep = if (clockwiseModeEnabled) 60f else -60f
             val cueEndAngle = -90f + cueSweep
             val cueEndAngleRad = Math.toRadians(cueEndAngle.toDouble()).toFloat()
             val cueTip = Offset(
-                x = center.x + cueRadius * kotlin.math.cos(cueEndAngleRad),
-                y = center.y + cueRadius * kotlin.math.sin(cueEndAngleRad),
+                x = squareCenter.x + cueRadius * kotlin.math.cos(cueEndAngleRad),
+                y = squareCenter.y + cueRadius * kotlin.math.sin(cueEndAngleRad),
             )
             val cueHeadSize = cueStroke * 2.5f
             val cueTangentRad = cueEndAngleRad + if (clockwiseModeEnabled) (PI / 2).toFloat() else (-PI / 2).toFloat()
@@ -125,10 +138,10 @@ fun QuickTimerDial(
             val cuePaint = ComposePaint().apply { alpha = 0.62f }
             drawContext.canvas.saveLayer(
                 Rect(
-                    center.x - cueRadius - cueHeadSize,
-                    center.y - cueRadius - cueHeadSize,
-                    center.x + cueRadius + cueHeadSize,
-                    center.y + cueRadius + cueHeadSize,
+                    squareCenter.x - cueRadius - cueHeadSize,
+                    squareCenter.y - cueRadius - cueHeadSize,
+                    squareCenter.x + cueRadius + cueHeadSize,
+                    squareCenter.y + cueRadius + cueHeadSize,
                 ),
                 cuePaint,
             )
@@ -137,7 +150,7 @@ fun QuickTimerDial(
                 startAngle = -90f,
                 sweepAngle = cueSweep,
                 useCenter = false,
-                topLeft = Offset(center.x - cueRadius, center.y - cueRadius),
+                topLeft = Offset(squareCenter.x - cueRadius, squareCenter.y - cueRadius),
                 size = Size(cueRadius * 2f, cueRadius * 2f),
                 style = Stroke(width = cueStroke, cap = StrokeCap.Round),
             )
@@ -167,12 +180,12 @@ fun QuickTimerDial(
             }
 
             // Outer ring 12 o'clock divider — drawn after the red arc so it renders on top
-            val arcRadius = size.minDimension / 2f - strokeWidth
+            val arcRadius = canvasSide / 2f - strokeWidth
             drawLine(
                 color = dividerColor,
-                start = Offset(center.x, center.y - arcRadius - strokeWidth / 2f),
-                end = Offset(center.x, center.y - arcRadius + strokeWidth / 2f),
-                strokeWidth = size.minDimension * 0.012f,
+                start = Offset(squareCenter.x, squareCenter.y - arcRadius - strokeWidth / 2f),
+                end = Offset(squareCenter.x, squareCenter.y - arcRadius + strokeWidth / 2f),
+                strokeWidth = canvasSide * 0.012f,
                 cap = StrokeCap.Round,
             )
 
@@ -180,8 +193,8 @@ fun QuickTimerDial(
             if (totalAngle >= 360f) {
                 val innerStroke = strokeWidth * 0.55f
                 val innerPad = padding + strokeWidth * 1.6f
-                val innerTopLeft = Offset(innerPad, innerPad)
-                val innerSize = Size(size.width - innerPad * 2f, size.height - innerPad * 2f)
+                val innerTopLeft = Offset(squareTopLeft.x + innerPad, squareTopLeft.y + innerPad)
+                val innerSize = Size(canvasSide - innerPad * 2f, canvasSide - innerPad * 2f)
 
                 drawArc(
                     color = trackColor,
@@ -206,12 +219,12 @@ fun QuickTimerDial(
                 }
 
                 // Inner ring 12 o'clock divider
-                val innerArcRadius = size.minDimension / 2f - innerPad
+                val innerArcRadius = canvasSide / 2f - innerPad
                 drawLine(
                     color = dividerColor,
-                    start = Offset(center.x, center.y - innerArcRadius - innerStroke / 2f),
-                    end = Offset(center.x, center.y - innerArcRadius + innerStroke / 2f),
-                    strokeWidth = size.minDimension * 0.010f,
+                    start = Offset(squareCenter.x, squareCenter.y - innerArcRadius - innerStroke / 2f),
+                    end = Offset(squareCenter.x, squareCenter.y - innerArcRadius + innerStroke / 2f),
+                    strokeWidth = canvasSide * 0.010f,
                     cap = StrokeCap.Round,
                 )
             }

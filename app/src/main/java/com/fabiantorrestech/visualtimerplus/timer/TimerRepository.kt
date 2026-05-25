@@ -25,6 +25,7 @@ object TimerRepository {
     private const val KEY_OVERLAY_SHOW_ON_LOCKSCREEN = "overlay_show_on_lockscreen"
     private const val KEY_AUTO_BACKUP_ENABLED = "auto_backup_enabled"
     private const val KEY_AUTO_OPEN_APP_AFTER_QUICK_START = "auto_open_app_after_quick_start"
+    private const val KEY_QUICK_TIMER_LANDSCAPE_PLACEMENT = "quick_timer_landscape_placement"
     private const val KEY_CUSTOM_FONT_PATH = "custom_font_path"
     private const val KEY_CUSTOM_FONT_DISPLAY_NAME = "custom_font_display_name"
 
@@ -182,6 +183,9 @@ object TimerRepository {
         val overlayTimerNamePosition = preferences.getString(KEY_OVERLAY_TIMER_NAME_POSITION, null)
             ?.let { name -> OverlayLabelPosition.entries.firstOrNull { it.name == name } }
             ?: OverlayLabelPosition.Top
+        val quickTimerLandscapePlacement = preferences.getString(KEY_QUICK_TIMER_LANDSCAPE_PLACEMENT, null)
+            ?.let { name -> QuickTimerLandscapePlacement.entries.firstOrNull { it.name == name } }
+            ?: QuickTimerLandscapePlacement.Center
 
         return AppState(
             timers = timers,
@@ -202,6 +206,7 @@ object TimerRepository {
             overlayShowOnLockscreen = preferences.getBoolean(KEY_OVERLAY_SHOW_ON_LOCKSCREEN, false),
             autoBackupEnabled = preferences.getBoolean(KEY_AUTO_BACKUP_ENABLED, false),
             autoOpenAppAfterQuickStart = preferences.getBoolean(KEY_AUTO_OPEN_APP_AFTER_QUICK_START, true),
+            quickTimerLandscapePlacement = quickTimerLandscapePlacement,
             customFontPath = preferences.getString(KEY_CUSTOM_FONT_PATH, null),
             customFontDisplayName = preferences.getString(KEY_CUSTOM_FONT_DISPLAY_NAME, null),
         )
@@ -335,6 +340,7 @@ object TimerRepository {
             .putBoolean(KEY_OVERLAY_SHOW_ON_LOCKSCREEN, state.overlayShowOnLockscreen)
             .putBoolean(KEY_AUTO_BACKUP_ENABLED, state.autoBackupEnabled)
             .putBoolean(KEY_AUTO_OPEN_APP_AFTER_QUICK_START, state.autoOpenAppAfterQuickStart)
+            .putString(KEY_QUICK_TIMER_LANDSCAPE_PLACEMENT, state.quickTimerLandscapePlacement.name)
             .putString(KEY_CUSTOM_FONT_PATH, state.customFontPath)
             .putString(KEY_CUSTOM_FONT_DISPLAY_NAME, state.customFontDisplayName)
             .putInt(KEY_TIMER_COUNT, state.timers.size)

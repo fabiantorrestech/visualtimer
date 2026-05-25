@@ -230,6 +230,11 @@ class TimerController(context: Context) {
                 AutoBackupManager.scheduleBackup(appContext)
             }
 
+            is TimerAction.SetQuickTimerLandscapePlacement -> {
+                TimerRepository.update { state -> state.copy(quickTimerLandscapePlacement = action.placement) }
+                AutoBackupManager.scheduleBackup(appContext)
+            }
+
             is TimerAction.SetCustomFont -> {
                 TimerRepository.update { state ->
                     state.copy(customFontPath = action.path, customFontDisplayName = action.displayName)

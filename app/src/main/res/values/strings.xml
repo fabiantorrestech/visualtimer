@@ -238,6 +238,7 @@
     <string name="quick_timer_tab_presets">My Presets</string>
     <string name="quick_timer_tab_custom">Quick</string>
     <string name="quick_timer_set">Set…</string>
+    <string name="quick_timer_set_timer">Set timer</string>
     <string name="quick_timer_name_hint">Timer name (optional)</string>
     <string name="quick_timer_start">Start Timer</string>
     <string name="quick_timer_max_reached">Maximum timers reached (%1$d)</string>
@@ -271,6 +272,8 @@
     <string name="automation_dialog_title">Automation &amp; Shortcuts</string>
     <string name="automation_dialog_close">Close</string>
     <string name="automation_auto_open_after_quick_start">Automatically go into app after starting a timer</string>
+    <string name="quick_timer_landscape_placement_label">Landscape Quick Timer popup position</string>
+    <string name="quick_timer_landscape_placement_description">Choose where the shortcut popup appears when the phone is in landscape.</string>
     <string name="automation_section_quick_timer">Open Quick Timer popup</string>
     <string name="automation_section_control">Control timers (Service Intent)</string>
     <string name="automation_section_macrodroid">MacroDroid</string>

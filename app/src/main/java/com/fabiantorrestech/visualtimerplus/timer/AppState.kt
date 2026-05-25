@@ -3,6 +3,7 @@ package com.fabiantorrestech.visualtimerplus.timer
 import androidx.compose.runtime.Immutable
 
 enum class NotificationMode { Consolidated, Individual }
+enum class QuickTimerLandscapePlacement { Center, LeftPanel, RightPanel }
 
 @Immutable
 data class AppState(
@@ -27,6 +28,7 @@ data class AppState(
     val overlayShowOnLockscreen: Boolean = false,
     val autoBackupEnabled: Boolean = false,
     val autoOpenAppAfterQuickStart: Boolean = true,
+    val quickTimerLandscapePlacement: QuickTimerLandscapePlacement = QuickTimerLandscapePlacement.Center,
     val customFontPath: String? = null,
     val customFontDisplayName: String? = null,
 ) {

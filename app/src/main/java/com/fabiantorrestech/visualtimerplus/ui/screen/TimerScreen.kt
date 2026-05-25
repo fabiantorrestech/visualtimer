@@ -134,6 +134,7 @@ import com.fabiantorrestech.visualtimerplus.timer.NotificationMode
 import com.fabiantorrestech.visualtimerplus.timer.OverlayLabelPosition
 import com.fabiantorrestech.visualtimerplus.timer.OverlaySize
 import com.fabiantorrestech.visualtimerplus.timer.OverlayStyle
+import com.fabiantorrestech.visualtimerplus.timer.QuickTimerLandscapePlacement
 import com.fabiantorrestech.visualtimerplus.timer.ThemeMode
 import com.fabiantorrestech.visualtimerplus.timer.TimerAction
 import com.fabiantorrestech.visualtimerplus.timer.TimerController
@@ -1775,6 +1776,11 @@ private fun SettingsSheetContent(
                     checked = appState.autoOpenAppAfterQuickStart,
                     onCheckedChange = { onAction(TimerAction.SetAutoOpenAppAfterQuickStart(it)) },
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+                QuickTimerLandscapePlacementSelector(
+                    selectedPlacement = appState.quickTimerLandscapePlacement,
+                    onPlacementSelected = { onAction(TimerAction.SetQuickTimerLandscapePlacement(it)) },
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -2989,6 +2995,42 @@ private fun NotificationUpdateIntervalSelector(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun QuickTimerLandscapePlacementSelector(
+    selectedPlacement: QuickTimerLandscapePlacement,
+    onPlacementSelected: (QuickTimerLandscapePlacement) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.quick_timer_landscape_placement_label),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(R.string.quick_timer_landscape_placement_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SelectorChip(
+                label = stringResource(R.string.clock_center),
+                selected = selectedPlacement == QuickTimerLandscapePlacement.Center,
+                onClick = { onPlacementSelected(QuickTimerLandscapePlacement.Center) },
+            )
+            SelectorChip(
+                label = stringResource(R.string.clock_left),
+                selected = selectedPlacement == QuickTimerLandscapePlacement.LeftPanel,
+                onClick = { onPlacementSelected(QuickTimerLandscapePlacement.LeftPanel) },
+            )
+            SelectorChip(
+                label = stringResource(R.string.clock_right),
+                selected = selectedPlacement == QuickTimerLandscapePlacement.RightPanel,
+                onClick = { onPlacementSelected(QuickTimerLandscapePlacement.RightPanel) },
+            )
         }
     }
 }
