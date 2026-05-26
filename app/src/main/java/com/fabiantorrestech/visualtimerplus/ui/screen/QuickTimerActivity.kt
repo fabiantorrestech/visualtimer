@@ -316,7 +316,7 @@ private fun QuickTimerPopup(
                             .fillMaxWidth()
                             .weight(1f)
                     } else {
-                        Modifier.fillMaxWidth()
+                        Modifier.fillMaxWidth().heightIn(min = 220.dp, max = 300.dp)
                     },
                 ) {
                     when (selectedTab) {
