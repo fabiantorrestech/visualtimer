@@ -184,6 +184,7 @@ class TimerService : Service() {
         val originalDuration = timer.originalDurationMillis
         if (originalDuration <= 0L) return
 
+        notificationManager.cancelAlarmTriggerNotification(index)
         completeLogEntry(index)
         createLogEntry(index, originalDuration, timer.activeTimerName, timer.activePresetId, timer.scheduleId)
 
@@ -253,29 +254,36 @@ class TimerService : Service() {
         val wasAlerted = lastAlertedTimerIndex == index
         val scheduleId = timer.scheduleId
 
-        val resetDuration = timer.defaultDurationMillis.takeIf { it > 0L } ?: 0L
-        TimerRepository.updateTimer(index) { t ->
-            t.copy(
-                status = TimerStatus.Idle,
-                selectedDurationMillis = resetDuration,
-                remainingMillis = resetDuration,
-                targetEndTimeMillis = null,
-                pausedRemainingMillis = null,
-                originalDurationMillis = 0L,
-                activeTimerName = "",
-                activePresetId = null,
-                activeLogEntryId = -1L,
-                scheduleId = null,
-                totalAdjustmentMillis = 0L,
-                timeToDismissAccumulatedMillis = 0L,
-                overtimeStartedAtMillis = null,
-            )
+        TimerRepository.update { current ->
+            current.withTimer(index) { t ->
+                if (t.isDefaultManaged()) {
+                    current.resetToLatestDefaults(t)
+                } else {
+                    val resetDuration = t.defaultDurationMillis.takeIf { it > 0L } ?: 0L
+                    t.copy(
+                        status = TimerStatus.Idle,
+                        selectedDurationMillis = resetDuration,
+                        remainingMillis = resetDuration,
+                        targetEndTimeMillis = null,
+                        pausedRemainingMillis = null,
+                        originalDurationMillis = 0L,
+                        activeTimerName = "",
+                        activePresetId = null,
+                        activeLogEntryId = -1L,
+                        scheduleId = null,
+                        totalAdjustmentMillis = 0L,
+                        timeToDismissAccumulatedMillis = 0L,
+                        overtimeStartedAtMillis = null,
+                    )
+                }
+            }
         }
 
         if (wasAlerted) {
             stopFinishedAlertEffects()
             lastAlertedTimerIndex = -1
         }
+        notificationManager.cancelAlarmTriggerNotification(index)
         ScheduledTimerManager.handleTimerLifecycleExitAsync(applicationContext, scheduleId)
 
         val state = TimerRepository.getState()
@@ -303,36 +311,42 @@ class TimerService : Service() {
         val state = TimerRepository.getState()
         if (index !in state.timers.indices) return
 
-        val timer = state.timers[index]
+        var timer = state.timers[index]
         if (timer.status !in setOf(TimerStatus.Finished, TimerStatus.Overtime)) return
 
         completeLogEntry(index)
+        timer = TimerRepository.getTimer(index)
         val scheduleId = timer.scheduleId
+        notificationManager.cancelAlarmTriggerNotification(index)
         val wasAlerted = lastAlertedTimerIndex == index
         if (wasAlerted) {
             stopFinishedAlertEffects()
             lastAlertedTimerIndex = -1
-        } else if (lastAlertedTimerIndex > index) {
+        } else if (!timer.isDefaultManaged() && lastAlertedTimerIndex > index) {
             lastAlertedTimerIndex -= 1
         }
 
         TimerRepository.update { current ->
             if (index !in current.timers.indices) return@update current
 
-            val updated = current.timers.toMutableList()
-            updated.removeAt(index)
-            val reindexed = updated.mapIndexed { newIndex, existing -> existing.copy(id = newIndex) }
-            val remainingTimers = reindexed.ifEmpty { listOf(current.createBlankTimer(id = 0)) }
-            val nextActiveIndex = when {
-                reindexed.isEmpty() -> 0
-                index < reindexed.size -> index
-                else -> reindexed.lastIndex
-            }
+            if (timer.isDefaultManaged()) {
+                current.withTimer(index) { current.resetToLatestDefaults(it) }
+            } else {
+                val updated = current.timers.toMutableList()
+                updated.removeAt(index)
+                val reindexed = updated.mapIndexed { newIndex, existing -> existing.copy(id = newIndex) }
+                val remainingTimers = reindexed.ifEmpty { listOf(current.createBlankTimer(id = 0)) }
+                val nextActiveIndex = when {
+                    reindexed.isEmpty() -> 0
+                    index < reindexed.size -> index
+                    else -> reindexed.lastIndex
+                }
 
-            current.copy(
-                timers = remainingTimers,
-                activeTimerIndex = nextActiveIndex,
-            )
+                current.copy(
+                    timers = remainingTimers,
+                    activeTimerIndex = nextActiveIndex,
+                )
+            }
         }
 
         ScheduledTimerManager.handleTimerLifecycleExitAsync(applicationContext, scheduleId)
@@ -371,6 +385,7 @@ class TimerService : Service() {
         }
         lastAlertedTimerIndex = index
         alertFinished(timer.settings)
+        notificationManager.postAlarmTriggerNotification(timer)
 
         if (!TimerRepository.isAppForeground) {
             promoteToForeground()
@@ -406,6 +421,7 @@ class TimerService : Service() {
             stopFinishedAlertEffects()
             lastAlertedTimerIndex = -1
         }
+        notificationManager.cancelAlarmTriggerNotification(index)
 
         promoteToForeground()
         notificationManager.updateNotification(TimerRepository.getState())

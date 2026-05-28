@@ -357,6 +357,23 @@ class TimerNotificationManager(
             ?: state.timers.firstOrNull { it.status == TimerStatus.Finished }
             ?: state.activeTimer
 
+    fun postAlarmTriggerNotification(timer: TimerInstance) {
+        val title = timer.activeTimerName.ifBlank { context.getString(R.string.notification_finished_title) }
+        val notification = Notification.Builder(context, FINISHED_CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(context.getString(R.string.notification_finished))
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setCategory(Notification.CATEGORY_ALARM)
+            .setFullScreenIntent(fullScreenPendingIntent(), true)
+            .setAutoCancel(true)
+            .build()
+        notificationManager.notify(ALARM_TRIGGER_BASE + timer.id, notification)
+    }
+
+    fun cancelAlarmTriggerNotification(timerId: Int) {
+        notificationManager.cancel(ALARM_TRIGGER_BASE + timerId)
+    }
+
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val runningChannel = NotificationChannel(
@@ -387,6 +404,7 @@ class TimerNotificationManager(
         private const val QUICK_START_NOTIFICATION_BASE = 3000
         const val ACTION_CYCLE_TIMER = "com.fabiantorrestech.visualtimerplus.action.CYCLE_TIMER"
         const val EXTRA_TARGET_TIMER_INDEX = "target_timer_index"
+        const val ALARM_TRIGGER_BASE = 3200
 
         fun showQuickStartNotification(
             context: Context,

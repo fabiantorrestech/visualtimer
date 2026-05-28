@@ -65,20 +65,21 @@ fun AppState.createBlankTimer(id: Int): TimerInstance {
     )
 }
 
+fun TimerInstance.isDefaultManaged(): Boolean =
+    activeTimerName.isBlank() &&
+        activePresetId == null &&
+        activeLogEntryId == -1L &&
+        scheduleId == null
+
+fun AppState.resetToLatestDefaults(timer: TimerInstance): TimerInstance =
+    createBlankTimer(id = timer.id)
+
 fun AppState.isReusableEmptyTimer(timer: TimerInstance): Boolean {
-    val resetDuration = defaultDurationMillis.takeIf { it > 0L } ?: 0L
     return timer.status == TimerStatus.Idle &&
-        timer.activeTimerName.isBlank() &&
-        timer.activePresetId == null &&
-        timer.defaultDurationMillis == defaultDurationMillis &&
-        timer.settings == defaultTimerSettings &&
-        timer.selectedDurationMillis == resetDuration &&
-        timer.remainingMillis == resetDuration &&
+        timer.isDefaultManaged() &&
         timer.targetEndTimeMillis == null &&
         timer.pausedRemainingMillis == null &&
         timer.originalDurationMillis == 0L &&
-        timer.activeLogEntryId == -1L &&
-        timer.scheduleId == null &&
         timer.totalAdjustmentMillis == 0L &&
         timer.timeToDismissAccumulatedMillis == 0L &&
         timer.overtimeStartedAtMillis == null

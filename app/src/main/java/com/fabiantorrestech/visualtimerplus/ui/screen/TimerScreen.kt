@@ -67,8 +67,8 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -139,6 +139,7 @@ import com.fabiantorrestech.visualtimerplus.timer.ThemeMode
 import com.fabiantorrestech.visualtimerplus.timer.TimerAction
 import com.fabiantorrestech.visualtimerplus.timer.TimerController
 import com.fabiantorrestech.visualtimerplus.timer.TimerInstance
+import com.fabiantorrestech.visualtimerplus.timer.TimerSettings
 import com.fabiantorrestech.visualtimerplus.timer.TimerStatus
 import com.fabiantorrestech.visualtimerplus.ui.component.DurationPickerSheet
 import com.fabiantorrestech.visualtimerplus.ui.component.PresetRow
@@ -1729,63 +1730,114 @@ private fun SettingsSheetContent(
             color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(modifier = Modifier.height(12.dp))
-        TabRow(selectedTabIndex = selectedTab) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = { Text(stringResource(R.string.settings_tab_settings)) },
+        val tabLabels = listOf(
+            R.string.settings_tab_appearance,
+            R.string.settings_tab_behavior,
+            R.string.settings_tab_notifications,
+            R.string.settings_tab_overlay,
+            R.string.settings_tab_extra,
+            R.string.settings_tab_permissions,
+        )
+        ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 0.dp) {
+            tabLabels.forEachIndexed { index, labelRes ->
+                Tab(
+                    selected = selectedTab == index,
+                    onClick = { selectedTab = index },
+                    text = { Text(stringResource(labelRes), maxLines = 1) },
+                )
+            }
+        }
+
+        when (selectedTab) {
+            0 -> AppearanceSettingsTab(
+                appState = appState,
+                settings = settings,
+                onAction = onAction,
+                onPickFont = { fontPickerLauncher.launch(arrayOf("*/*")) },
             )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                text = { Text(stringResource(R.string.settings_tab_permissions)) },
+            1 -> BehaviorSettingsTab(
+                appState = appState,
+                settings = settings,
+                onAction = onAction,
+                onSetDefaultDuration = onSetDefaultDuration,
+                onShowAutomationDialog = { showAutomationDialog = true },
+            )
+            2 -> NotificationSettingsTab(
+                appState = appState,
+                settings = settings,
+                onAction = onAction,
+            )
+            3 -> OverlaySettingsTab(
+                appState = appState,
+                overlayPermissionGranted = overlayPermissionGranted,
+                accessibilityServiceConnected = accessibilityServiceConnected,
+                onAction = onAction,
+                onOpenOverlayPermissionSettings = onOpenOverlayPermissionSettings,
+                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+            )
+            4 -> ExtraSettingsTab(
+                autoBackupEnabled = appState.autoBackupEnabled,
+                autoBackupLocationUri = autoBackupLocationUri,
+                backupStatusMessage = backupStatusMessage,
+                onAction = onAction,
+                onExport = { exportLauncher.launch("visualtimer_backup_$today.json") },
+                onImport = { importLauncher.launch(arrayOf("application/json")) },
+                onSetAutoBackupLocation = { autoBackupFolderLauncher.launch(null) },
+            )
+            else -> PermissionsTabContent(
+                notifGranted = notifGranted,
+                overlayGranted = overlayPermissionGranted,
+                exactAlarmGranted = exactAlarmGranted,
+                fullScreenGranted = fullScreenGranted,
+                accessibilityServiceConnected = accessibilityServiceConnected,
+                onRequestNotification = onRequestNotificationPermission,
+                onOpenOverlaySettings = onOpenOverlayPermissionSettings,
+                onOpenExactAlarmSettings = {
+                    context.startActivity(
+                        Intent(
+                            Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                            Uri.parse("package:${context.packageName}"),
+                        )
+                    )
+                },
+                onOpenFullScreenSettings = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                                Uri.parse("package:${context.packageName}"),
+                            )
+                        )
+                    }
+                },
+                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
             )
         }
 
-        if (selectedTab == 0) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(top = 16.dp),
-            ) {
-            // ── Automation ────────────────────────────────────────────────────────
-            SectionCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = stringResource(R.string.automation_title),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = { showAutomationDialog = true }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_info_outline),
-                            contentDescription = stringResource(R.string.automation_dialog_title),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                PreferenceToggle(
-                    label = stringResource(R.string.automation_auto_open_after_quick_start),
-                    checked = appState.autoOpenAppAfterQuickStart,
-                    onCheckedChange = { onAction(TimerAction.SetAutoOpenAppAfterQuickStart(it)) },
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                QuickTimerLandscapePlacementSelector(
-                    selectedPlacement = appState.quickTimerLandscapePlacement,
-                    onPlacementSelected = { onAction(TimerAction.SetQuickTimerLandscapePlacement(it)) },
-                )
-            }
+    } // closes outer Column
+} // closes SettingsSheetContent
 
-            Spacer(modifier = Modifier.height(12.dp))
+@Composable
+private fun SettingsTabColumn(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(top = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        content = content,
+    )
+}
 
-        // ── App-global settings ────────────────────────────────────────────────
+@Composable
+private fun AppearanceSettingsTab(
+    appState: AppState,
+    settings: TimerSettings,
+    onAction: (TimerAction) -> Unit,
+    onPickFont: () -> Unit,
+) {
+    val defaultSettings = appState.defaultTimerSettings
+    SettingsTabColumn {
         SectionCard {
             ThemeModeSelector(
                 selectedMode = appState.themeMode,
@@ -1800,40 +1852,129 @@ private fun SettingsSheetContent(
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
-            Column {
-                Text(
-                    text = stringResource(R.string.custom_font),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = appState.customFontDisplayName ?: stringResource(R.string.custom_font_none),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { fontPickerLauncher.launch(arrayOf("*/*")) }) {
-                        Text(stringResource(R.string.custom_font_select))
-                    }
-                    if (appState.customFontPath != null) {
-                        OutlinedButton(onClick = { onAction(TimerAction.SetCustomFont(null, null)) }) {
-                            Text(stringResource(R.string.custom_font_reset))
-                        }
-                    }
-                }
-                Text(
-                    text = stringResource(R.string.custom_font_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+            CustomFontPicker(appState = appState, onPickFont = onPickFont, onAction = onAction)
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.hide_status_bar),
+                checked = appState.hideStatusBarEnabled,
+                onCheckedChange = { onAction(TimerAction.SetHideStatusBarEnabled(it)) },
+            )
+            if (appState.hideStatusBarEnabled) {
+                Spacer(modifier = Modifier.height(12.dp))
+                PreferenceToggle(
+                    label = stringResource(R.string.hide_status_bar_only_while_running),
+                    checked = appState.hideStatusBarOnlyWhenRunning,
+                    onCheckedChange = { onAction(TimerAction.SetHideStatusBarOnlyWhenRunning(it)) },
                 )
             }
+        }
+
+        SectionCard(title = stringResource(R.string.current_timer_settings)) {
+            TimerAppearanceControls(
+                settings = settings,
+                onShowCurrentTime = { onAction(TimerAction.SetShowCurrentTimeEnabled(it)) },
+                onShowClockSeconds = { onAction(TimerAction.SetShowClockSecondsEnabled(it)) },
+                onClockPosition = { onAction(TimerAction.SetClockPosition(it)) },
+                onClockSize = { onAction(TimerAction.SetClockTextSizeSp(it)) },
+                onShowEndTime = { onAction(TimerAction.SetShowEndTimeEnabled(it)) },
+                onShowEndTimeSeconds = { onAction(TimerAction.SetShowEndTimeSecondsEnabled(it)) },
+                onEndTimeSize = { onAction(TimerAction.SetEndTimeSizeSp(it)) },
+                onCenterTimeSize = { onAction(TimerAction.SetCenterTimeSizeSp(it)) },
+                onClockwiseMode = { onAction(TimerAction.SetClockwiseModeEnabled(it)) },
+                onShowDirectionIndicator = { onAction(TimerAction.SetShowDirectionIndicator(it)) },
+                onFullClockMode = { onAction(TimerAction.SetFullClockMode(it)) },
+                onCleanMode = { onAction(TimerAction.SetCleanModeEnabled(it)) },
+                onCleanAutoDismiss = { onAction(TimerAction.SetCleanModeAutoDismissEnabled(it)) },
+                onCleanAutoDismissSeconds = { onAction(TimerAction.SetCleanModeAutoDismissSeconds(it)) },
+                onHideClockInCleanMode = { onAction(TimerAction.SetHideClockInCleanMode(it)) },
+                onTimerTitle = { onAction(TimerAction.SetTimerTitleEnabled(it)) },
+                onTimerTitlePosition = { onAction(TimerAction.SetTimerTitlePosition(it)) },
+                onTimerTitleSize = { onAction(TimerAction.SetTimerTitleTextSizeSp(it)) },
+                onTimerTitleHideInCleanMode = { onAction(TimerAction.SetTimerTitleHideInCleanMode(it)) },
+            )
+        }
+
+        SectionCard(title = stringResource(R.string.default_timer_settings_title)) {
+            TimerAppearanceControls(
+                settings = defaultSettings,
+                onShowCurrentTime = {
+                    onAction(TimerAction.SetDefaultTimerSettings(
+                        defaultSettings.copy(showCurrentTimeEnabled = it, showClockSecondsEnabled = if (it) defaultSettings.showClockSecondsEnabled else false)
+                    ))
+                },
+                onShowClockSeconds = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(showClockSecondsEnabled = it))) },
+                onClockPosition = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(clockPosition = it))) },
+                onClockSize = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(clockTextSizeSp = it))) },
+                onShowEndTime = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(showEndTimeEnabled = it))) },
+                onShowEndTimeSeconds = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(showEndTimeSecondsEnabled = it))) },
+                onEndTimeSize = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(endTimeSizeSp = it))) },
+                onCenterTimeSize = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(centerTimeSizeSp = it))) },
+                onClockwiseMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(clockwiseModeEnabled = it))) },
+                onShowDirectionIndicator = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(showDirectionIndicator = it))) },
+                onFullClockMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(fullClockMode = it))) },
+                onCleanMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(cleanModeEnabled = it))) },
+                onCleanAutoDismiss = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(cleanModeAutoDismissEnabled = it))) },
+                onCleanAutoDismissSeconds = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(cleanModeAutoDismissSeconds = it))) },
+                onHideClockInCleanMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(hideClockInCleanMode = it))) },
+                onTimerTitle = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(timerTitleEnabled = it))) },
+                onTimerTitlePosition = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(timerTitlePosition = it))) },
+                onTimerTitleSize = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(timerTitleTextSizeSp = it))) },
+                onTimerTitleHideInCleanMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(timerTitleHideInCleanMode = it))) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun BehaviorSettingsTab(
+    appState: AppState,
+    settings: TimerSettings,
+    onAction: (TimerAction) -> Unit,
+    onSetDefaultDuration: () -> Unit,
+    onShowAutomationDialog: () -> Unit,
+) {
+    val defaultSettings = appState.defaultTimerSettings
+    SettingsTabColumn {
+        SectionCard(title = stringResource(R.string.default_timer_settings_title)) {
+            DefaultDurationRow(
+                defaultDurationMillis = appState.defaultDurationMillis,
+                onSetDefaultDuration = onSetDefaultDuration,
+            )
             Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.prompt_before_start),
+                checked = defaultSettings.promptBeforeStart,
+                onCheckedChange = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(promptBeforeStart = it))) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.keep_screen_awake),
+                checked = defaultSettings.keepScreenAwake,
+                onCheckedChange = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(keepScreenAwake = it))) },
+            )
+        }
+
+        SectionCard(title = stringResource(R.string.current_timer_settings)) {
+            PreferenceToggle(
+                label = stringResource(R.string.prompt_before_start),
+                checked = settings.promptBeforeStart,
+                onCheckedChange = { onAction(TimerAction.SetPromptBeforeStart(it)) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.keep_screen_awake),
+                checked = settings.keepScreenAwake,
+                onCheckedChange = { onAction(TimerAction.SetKeepScreenAwakeEnabled(it)) },
+            )
+        }
+
+        SectionCard {
             PreferenceToggle(
                 label = stringResource(R.string.confirm_swipe_delete),
                 checked = appState.confirmSwipeDelete,
                 onCheckedChange = { onAction(TimerAction.SetConfirmSwipeDelete(it)) },
             )
+            Spacer(modifier = Modifier.height(12.dp))
             PreferenceToggle(
                 label = stringResource(R.string.tap_to_toggle_minimal_mode),
                 checked = appState.tapToToggleMinimalMode,
@@ -1841,8 +1982,97 @@ private fun SettingsSheetContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        SectionCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = stringResource(R.string.automation_title),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onShowAutomationDialog) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_info_outline),
+                        contentDescription = stringResource(R.string.automation_dialog_title),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.automation_auto_open_after_quick_start),
+                checked = appState.autoOpenAppAfterQuickStart,
+                onCheckedChange = { onAction(TimerAction.SetAutoOpenAppAfterQuickStart(it)) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            QuickTimerLandscapePlacementSelector(
+                selectedPlacement = appState.quickTimerLandscapePlacement,
+                onPlacementSelected = { onAction(TimerAction.SetQuickTimerLandscapePlacement(it)) },
+            )
+        }
+    }
+}
 
+@Composable
+private fun NotificationSettingsTab(
+    appState: AppState,
+    settings: TimerSettings,
+    onAction: (TimerAction) -> Unit,
+) {
+    val defaultSettings = appState.defaultTimerSettings
+    SettingsTabColumn {
+        SectionCard(title = stringResource(R.string.current_timer_settings)) {
+            TimerNotificationControls(
+                settings = settings,
+                onSoundEnabled = { onAction(TimerAction.SetSoundEnabled(it)) },
+                onRoute = { onAction(TimerAction.SetFinishedSoundRoute(it)) },
+                onVolume = { onAction(TimerAction.SetFinishedSoundVolumePercent(it)) },
+                onIgnoreSilent = { onAction(TimerAction.SetIgnoreSilentMode(it)) },
+                onOverrideMuted = { onAction(TimerAction.SetOverrideMutedSystemVolume(it)) },
+                onVibration = { onAction(TimerAction.SetFinishedVibrationMode(it)) },
+            )
+        }
+
+        SectionCard(title = stringResource(R.string.default_timer_settings_title)) {
+            TimerNotificationControls(
+                settings = defaultSettings,
+                onSoundEnabled = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(soundEnabled = it))) },
+                onRoute = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(finishedSoundRoute = it))) },
+                onVolume = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(finishedSoundVolumePercent = it))) },
+                onIgnoreSilent = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(ignoreSilentMode = it))) },
+                onOverrideMuted = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(overrideMutedSystemVolume = it))) },
+                onVibration = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(finishedVibrationMode = it))) },
+            )
+        }
+
+        SectionCard {
+            NotificationModeSelector(
+                selectedMode = appState.notificationMode,
+                onModeSelected = { onAction(TimerAction.SetNotificationMode(it)) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            NotificationUpdateIntervalSelector(
+                intervalSeconds = appState.notificationUpdateIntervalSeconds,
+                onIntervalSelected = { onAction(TimerAction.SetNotificationUpdateInterval(it)) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun OverlaySettingsTab(
+    appState: AppState,
+    overlayPermissionGranted: Boolean,
+    accessibilityServiceConnected: Boolean,
+    onAction: (TimerAction) -> Unit,
+    onOpenOverlayPermissionSettings: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
+) {
+    SettingsTabColumn {
         SectionCard {
             PreferenceToggle(
                 label = stringResource(R.string.overlay_enabled),
@@ -1914,351 +2144,47 @@ private fun SettingsSheetContent(
                 )
             }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        var currentSettingsExpanded by remember { mutableStateOf(false) }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { currentSettingsExpanded = !currentSettingsExpanded },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.current_timer_settings),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = if (currentSettingsExpanded) "▲" else "▼",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        AnimatedVisibility(visible = currentSettingsExpanded) {
-        Column {
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // ── Per-timer sound & vibration settings ──────────────────────────────
-        SectionCard {
-            PreferenceToggle(
-                label = stringResource(R.string.sound),
-                checked = settings.soundEnabled,
-                onCheckedChange = { onAction(TimerAction.SetSoundEnabled(it)) },
-            )
-            if (settings.soundEnabled) {
-                Spacer(modifier = Modifier.height(12.dp))
-                FinishedSoundRouteSelector(
-                    selectedRoute = settings.finishedSoundRoute,
-                    onRouteSelected = { onAction(TimerAction.SetFinishedSoundRoute(it)) },
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                FinishedSoundVolumeSlider(
-                    volumePercent = settings.finishedSoundVolumePercent,
-                    onVolumeChanged = { onAction(TimerAction.SetFinishedSoundVolumePercent(it)) },
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                PreferenceToggle(
-                    label = stringResource(R.string.ignore_silent_mode),
-                    checked = settings.ignoreSilentMode,
-                    onCheckedChange = { onAction(TimerAction.SetIgnoreSilentMode(it)) },
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                PreferenceToggle(
-                    label = stringResource(R.string.override_muted_system_volume),
-                    checked = settings.overrideMutedSystemVolume,
-                    onCheckedChange = { onAction(TimerAction.SetOverrideMutedSystemVolume(it)) },
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            FinishedVibrationSelector(
-                selectedMode = settings.finishedVibrationMode,
-                onModeSelected = { onAction(TimerAction.SetFinishedVibrationMode(it)) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.keep_screen_awake),
-                checked = settings.keepScreenAwake,
-                onCheckedChange = { onAction(TimerAction.SetKeepScreenAwakeEnabled(it)) },
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ── Status bar settings (app-global) ──────────────────────────────────
-        SectionCard {
-            PreferenceToggle(
-                label = stringResource(R.string.hide_status_bar),
-                checked = appState.hideStatusBarEnabled,
-                onCheckedChange = { onAction(TimerAction.SetHideStatusBarEnabled(it)) },
-            )
-            if (appState.hideStatusBarEnabled) {
-                Spacer(modifier = Modifier.height(12.dp))
-                PreferenceToggle(
-                    label = stringResource(R.string.hide_status_bar_only_while_running),
-                    checked = appState.hideStatusBarOnlyWhenRunning,
-                    onCheckedChange = { onAction(TimerAction.SetHideStatusBarOnlyWhenRunning(it)) },
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ── Per-timer visual settings ──────────────────────────────────────────
-        SectionCard {
-            PreferenceToggle(
-                label = stringResource(R.string.show_current_time),
-                checked = settings.showCurrentTimeEnabled,
-                onCheckedChange = { onAction(TimerAction.SetShowCurrentTimeEnabled(it)) },
-            )
-            if (settings.showCurrentTimeEnabled) {
-                Spacer(modifier = Modifier.height(12.dp))
-                PreferenceToggle(
-                    label = stringResource(R.string.show_seconds),
-                    checked = settings.showClockSecondsEnabled,
-                    onCheckedChange = { onAction(TimerAction.SetShowClockSecondsEnabled(it)) },
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                ClockPositionSelector(
-                    selectedPosition = settings.clockPosition,
-                    onPositionSelected = { onAction(TimerAction.SetClockPosition(it)) },
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                SizeSlider(
-                    label = stringResource(R.string.clock_size),
-                    value = settings.clockTextSizeSp,
-                    onValueChange = { onAction(TimerAction.SetClockTextSizeSp(it)) },
-                    valueRange = 14f..60f,
-                    defaultValue = 32f,
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.show_end_time),
-                checked = settings.showEndTimeEnabled,
-                onCheckedChange = { onAction(TimerAction.SetShowEndTimeEnabled(it)) },
-            )
-            if (settings.showEndTimeEnabled) {
-                Spacer(modifier = Modifier.height(12.dp))
-                PreferenceToggle(
-                    label = stringResource(R.string.show_end_time_seconds),
-                    checked = settings.showEndTimeSecondsEnabled,
-                    onCheckedChange = { onAction(TimerAction.SetShowEndTimeSecondsEnabled(it)) },
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                SizeSlider(
-                    label = stringResource(R.string.end_time_size),
-                    value = settings.endTimeSizeSp,
-                    onValueChange = { onAction(TimerAction.SetEndTimeSizeSp(it)) },
-                    valueRange = 14f..60f,
-                    defaultValue = 32f,
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            SizeSlider(
-                label = stringResource(R.string.center_time_size),
-                value = settings.centerTimeSizeSp,
-                onValueChange = { onAction(TimerAction.SetCenterTimeSizeSp(it)) },
-                valueRange = 20f..80f,
-                defaultValue = 36f,
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.clockwise_mode),
-                checked = settings.clockwiseModeEnabled,
-                onCheckedChange = { onAction(TimerAction.SetClockwiseModeEnabled(it)) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.show_direction_indicator),
-                checked = settings.showDirectionIndicator,
-                onCheckedChange = { onAction(TimerAction.SetShowDirectionIndicator(it)) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.full_clock_mode),
-                checked = settings.fullClockMode,
-                onCheckedChange = { onAction(TimerAction.SetFullClockMode(it)) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.clean_mode),
-                checked = settings.cleanModeEnabled,
-                onCheckedChange = { onAction(TimerAction.SetCleanModeEnabled(it)) },
-            )
-            if (settings.cleanModeEnabled) {
-                Spacer(modifier = Modifier.height(12.dp))
-                PreferenceToggle(
-                    label = stringResource(R.string.clean_mode_auto_dismiss_enabled),
-                    checked = settings.cleanModeAutoDismissEnabled,
-                    onCheckedChange = { onAction(TimerAction.SetCleanModeAutoDismissEnabled(it)) },
-                )
-                if (settings.cleanModeAutoDismissEnabled) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    SizeSlider(
-                        label = stringResource(R.string.clean_mode_auto_dismiss_time),
-                        value = settings.cleanModeAutoDismissSeconds.toFloat(),
-                        onValueChange = { onAction(TimerAction.SetCleanModeAutoDismissSeconds(it.roundToInt())) },
-                        valueRange = CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS.toFloat()..CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS.toFloat(),
-                        defaultValue = CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS.toFloat(),
-                        steps = CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS - CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS - 1,
-                        valueText = "${settings.cleanModeAutoDismissSeconds}s",
-                    )
-                }
-            }
-            if (settings.cleanModeEnabled && settings.showCurrentTimeEnabled) {
-                Spacer(modifier = Modifier.height(12.dp))
-                PreferenceToggle(
-                    label = stringResource(R.string.hide_clock_in_minimal_mode),
-                    checked = settings.hideClockInCleanMode,
-                    onCheckedChange = { onAction(TimerAction.SetHideClockInCleanMode(it)) },
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.timer_title_enabled),
-                checked = settings.timerTitleEnabled,
-                onCheckedChange = { onAction(TimerAction.SetTimerTitleEnabled(it)) },
-            )
-            if (settings.timerTitleEnabled) {
-                Spacer(modifier = Modifier.height(12.dp))
-                TitlePositionSelector(
-                    selectedPosition = settings.timerTitlePosition,
-                    onPositionSelected = { onAction(TimerAction.SetTimerTitlePosition(it)) },
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                SizeSlider(
-                    label = stringResource(R.string.timer_title_size),
-                    value = settings.timerTitleTextSizeSp,
-                    onValueChange = { onAction(TimerAction.SetTimerTitleTextSizeSp(it)) },
-                    valueRange = 10f..48f,
-                    defaultValue = 16f,
-                )
-                if (settings.cleanModeEnabled) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    PreferenceToggle(
-                        label = stringResource(R.string.timer_title_hide_in_clean_mode),
-                        checked = settings.timerTitleHideInCleanMode,
-                        onCheckedChange = { onAction(TimerAction.SetTimerTitleHideInCleanMode(it)) },
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ── Per-timer start settings ──────────────────────────────────────────
-        SectionCard {
-            PreferenceToggle(
-                label = stringResource(R.string.prompt_before_start),
-                checked = settings.promptBeforeStart,
-                onCheckedChange = { onAction(TimerAction.SetPromptBeforeStart(it)) },
-            )
-        }
-        } // Column
-        } // AnimatedVisibility(currentSettingsExpanded)
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ── Default settings for new timers (collapsible) ─────────────────────
-        var defaultSettingsExpanded by remember { mutableStateOf(false) }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { defaultSettingsExpanded = !defaultSettingsExpanded },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.default_timer_settings_title),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = if (defaultSettingsExpanded) "▲" else "▼",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        AnimatedVisibility(visible = defaultSettingsExpanded) {
-            Column {
-                Spacer(modifier = Modifier.height(4.dp))
-                DefaultTimerSettingsSection(
-                    defaultSettings = appState.defaultTimerSettings,
-                    defaultDurationMillis = appState.defaultDurationMillis,
-                    onSettingsChanged = { onAction(TimerAction.SetDefaultTimerSettings(it)) },
-                    onSetDefaultDuration = onSetDefaultDuration,
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ── Notification style (app-global) ───────────────────────────────────
-        SectionCard {
-            NotificationModeSelector(
-                selectedMode = appState.notificationMode,
-                onModeSelected = { onAction(TimerAction.SetNotificationMode(it)) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            NotificationUpdateIntervalSelector(
-                intervalSeconds = appState.notificationUpdateIntervalSeconds,
-                onIntervalSelected = { onAction(TimerAction.SetNotificationUpdateInterval(it)) },
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ── Backup & Restore ──────────────────────────────────────────────────
+@Composable
+private fun ExtraSettingsTab(
+    autoBackupEnabled: Boolean,
+    autoBackupLocationUri: String?,
+    backupStatusMessage: String?,
+    onAction: (TimerAction) -> Unit,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
+    onSetAutoBackupLocation: () -> Unit,
+) {
+    SettingsTabColumn {
         SectionCard(title = stringResource(R.string.backup_restore_title)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                OutlinedButton(
-                    onClick = { exportLauncher.launch("visualtimer_backup_$today.json") },
-                    modifier = Modifier.weight(1f),
-                ) { Text(stringResource(R.string.backup_export)) }
-                OutlinedButton(
-                    onClick = { importLauncher.launch(arrayOf("application/json")) },
-                    modifier = Modifier.weight(1f),
-                ) { Text(stringResource(R.string.backup_import)) }
+                OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.backup_export))
+                }
+                OutlinedButton(onClick = onImport, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.backup_import))
+                }
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.auto_backup_title),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(R.string.auto_backup_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Switch(
-                    checked = appState.autoBackupEnabled,
-                    onCheckedChange = { onAction(TimerAction.SetAutoBackupEnabled(it)) },
-                    enabled = autoBackupLocationUri != null,
-                )
-            }
-
+            PreferenceToggle(
+                label = stringResource(R.string.auto_backup_title),
+                description = stringResource(R.string.auto_backup_description),
+                checked = autoBackupEnabled,
+                onCheckedChange = {
+                    if (autoBackupLocationUri == null && it) {
+                        onSetAutoBackupLocation()
+                    } else {
+                        onAction(TimerAction.SetAutoBackupEnabled(it))
+                    }
+                },
+            )
             Spacer(modifier = Modifier.height(8.dp))
-
-            OutlinedButton(
-                onClick = { autoBackupFolderLauncher.launch(null) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            OutlinedButton(onClick = onSetAutoBackupLocation, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     if (autoBackupLocationUri == null)
                         stringResource(R.string.auto_backup_set_location)
@@ -2266,7 +2192,6 @@ private fun SettingsSheetContent(
                         stringResource(R.string.auto_backup_change_location)
                 )
             }
-
             autoBackupLocationUri?.let { uriString ->
                 Spacer(modifier = Modifier.height(4.dp))
                 val displayPath = Uri.parse(uriString).lastPathSegment ?: uriString
@@ -2278,7 +2203,6 @@ private fun SettingsSheetContent(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-
             backupStatusMessage?.let { msg ->
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -2288,41 +2212,271 @@ private fun SettingsSheetContent(
                 )
             }
         }
+    }
+}
 
-            Spacer(modifier = Modifier.height(24.dp))
-            } // closes inner Settings Column
-        } else {
-            PermissionsTabContent(
-                notifGranted = notifGranted,
-                overlayGranted = overlayPermissionGranted,
-                exactAlarmGranted = exactAlarmGranted,
-                fullScreenGranted = fullScreenGranted,
-                accessibilityServiceConnected = accessibilityServiceConnected,
-                onRequestNotification = onRequestNotificationPermission,
-                onOpenOverlaySettings = onOpenOverlayPermissionSettings,
-                onOpenExactAlarmSettings = {
-                    context.startActivity(
-                        Intent(
-                            Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                            Uri.parse("package:${context.packageName}"),
-                        )
-                    )
-                },
-                onOpenFullScreenSettings = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        context.startActivity(
-                            Intent(
-                                Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
-                                Uri.parse("package:${context.packageName}"),
-                            )
-                        )
-                    }
-                },
-                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+@Composable
+private fun CustomFontPicker(
+    appState: AppState,
+    onPickFont: () -> Unit,
+    onAction: (TimerAction) -> Unit,
+) {
+    Column {
+        Text(
+            text = stringResource(R.string.custom_font),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = appState.customFontDisplayName ?: stringResource(R.string.custom_font_none),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onPickFont) {
+                Text(stringResource(R.string.custom_font_select))
+            }
+            if (appState.customFontPath != null) {
+                OutlinedButton(onClick = { onAction(TimerAction.SetCustomFont(null, null)) }) {
+                    Text(stringResource(R.string.custom_font_reset))
+                }
+            }
+        }
+        Text(
+            text = stringResource(R.string.custom_font_hint),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+        )
+    }
+}
+
+@Composable
+private fun DefaultDurationRow(
+    defaultDurationMillis: Long,
+    onSetDefaultDuration: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = stringResource(R.string.default_duration),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Surface(
+            onClick = onSetDefaultDuration,
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        ) {
+            Text(
+                text = if (defaultDurationMillis > 0L)
+                    defaultDurationMillis.formatClockTime()
+                else stringResource(R.string.default_duration_not_set),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
-    } // closes outer Column
-} // closes SettingsSheetContent
+    }
+}
+
+@Composable
+private fun TimerNotificationControls(
+    settings: TimerSettings,
+    onSoundEnabled: (Boolean) -> Unit,
+    onRoute: (FinishedSoundRoute) -> Unit,
+    onVolume: (Int) -> Unit,
+    onIgnoreSilent: (Boolean) -> Unit,
+    onOverrideMuted: (Boolean) -> Unit,
+    onVibration: (FinishedVibrationMode) -> Unit,
+) {
+    PreferenceToggle(
+        label = stringResource(R.string.sound),
+        checked = settings.soundEnabled,
+        onCheckedChange = onSoundEnabled,
+    )
+    if (settings.soundEnabled) {
+        Spacer(modifier = Modifier.height(12.dp))
+        FinishedSoundRouteSelector(selectedRoute = settings.finishedSoundRoute, onRouteSelected = onRoute)
+        Spacer(modifier = Modifier.height(12.dp))
+        FinishedSoundVolumeSlider(volumePercent = settings.finishedSoundVolumePercent, onVolumeChanged = onVolume)
+        Spacer(modifier = Modifier.height(12.dp))
+        PreferenceToggle(
+            label = stringResource(R.string.ignore_silent_mode),
+            checked = settings.ignoreSilentMode,
+            onCheckedChange = onIgnoreSilent,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        PreferenceToggle(
+            label = stringResource(R.string.override_muted_system_volume),
+            checked = settings.overrideMutedSystemVolume,
+            onCheckedChange = onOverrideMuted,
+        )
+    }
+    Spacer(modifier = Modifier.height(12.dp))
+    FinishedVibrationSelector(selectedMode = settings.finishedVibrationMode, onModeSelected = onVibration)
+}
+
+@Composable
+private fun TimerAppearanceControls(
+    settings: TimerSettings,
+    onShowCurrentTime: (Boolean) -> Unit,
+    onShowClockSeconds: (Boolean) -> Unit,
+    onClockPosition: (ClockPosition) -> Unit,
+    onClockSize: (Float) -> Unit,
+    onShowEndTime: (Boolean) -> Unit,
+    onShowEndTimeSeconds: (Boolean) -> Unit,
+    onEndTimeSize: (Float) -> Unit,
+    onCenterTimeSize: (Float) -> Unit,
+    onClockwiseMode: (Boolean) -> Unit,
+    onShowDirectionIndicator: (Boolean) -> Unit,
+    onFullClockMode: (Boolean) -> Unit,
+    onCleanMode: (Boolean) -> Unit,
+    onCleanAutoDismiss: (Boolean) -> Unit,
+    onCleanAutoDismissSeconds: (Int) -> Unit,
+    onHideClockInCleanMode: (Boolean) -> Unit,
+    onTimerTitle: (Boolean) -> Unit,
+    onTimerTitlePosition: (ClockPosition) -> Unit,
+    onTimerTitleSize: (Float) -> Unit,
+    onTimerTitleHideInCleanMode: (Boolean) -> Unit,
+) {
+    SizeSlider(
+        label = stringResource(R.string.center_time_size),
+        value = settings.centerTimeSizeSp,
+        onValueChange = onCenterTimeSize,
+        valueRange = 20f..80f,
+        defaultValue = 36f,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    PreferenceToggle(
+        label = stringResource(R.string.show_current_time),
+        checked = settings.showCurrentTimeEnabled,
+        onCheckedChange = onShowCurrentTime,
+    )
+    if (settings.showCurrentTimeEnabled) {
+        Spacer(modifier = Modifier.height(12.dp))
+        PreferenceToggle(
+            label = stringResource(R.string.show_seconds),
+            checked = settings.showClockSecondsEnabled,
+            onCheckedChange = onShowClockSeconds,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        ClockPositionSelector(selectedPosition = settings.clockPosition, onPositionSelected = onClockPosition)
+        Spacer(modifier = Modifier.height(12.dp))
+        SizeSlider(
+            label = stringResource(R.string.clock_size),
+            value = settings.clockTextSizeSp,
+            onValueChange = onClockSize,
+            valueRange = 14f..60f,
+            defaultValue = 32f,
+        )
+    }
+    Spacer(modifier = Modifier.height(12.dp))
+    PreferenceToggle(
+        label = stringResource(R.string.show_end_time),
+        checked = settings.showEndTimeEnabled,
+        onCheckedChange = onShowEndTime,
+    )
+    if (settings.showEndTimeEnabled) {
+        Spacer(modifier = Modifier.height(12.dp))
+        PreferenceToggle(
+            label = stringResource(R.string.show_end_time_seconds),
+            checked = settings.showEndTimeSecondsEnabled,
+            onCheckedChange = onShowEndTimeSeconds,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        SizeSlider(
+            label = stringResource(R.string.end_time_size),
+            value = settings.endTimeSizeSp,
+            onValueChange = onEndTimeSize,
+            valueRange = 14f..60f,
+            defaultValue = 32f,
+        )
+    }
+    Spacer(modifier = Modifier.height(12.dp))
+    PreferenceToggle(
+        label = stringResource(R.string.clockwise_mode),
+        checked = settings.clockwiseModeEnabled,
+        onCheckedChange = onClockwiseMode,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    PreferenceToggle(
+        label = stringResource(R.string.show_direction_indicator),
+        checked = settings.showDirectionIndicator,
+        onCheckedChange = onShowDirectionIndicator,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    PreferenceToggle(
+        label = stringResource(R.string.full_clock_mode),
+        checked = settings.fullClockMode,
+        onCheckedChange = onFullClockMode,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    PreferenceToggle(
+        label = stringResource(R.string.clean_mode),
+        checked = settings.cleanModeEnabled,
+        onCheckedChange = onCleanMode,
+    )
+    if (settings.cleanModeEnabled) {
+        Spacer(modifier = Modifier.height(12.dp))
+        PreferenceToggle(
+            label = stringResource(R.string.clean_mode_auto_dismiss_enabled),
+            checked = settings.cleanModeAutoDismissEnabled,
+            onCheckedChange = onCleanAutoDismiss,
+        )
+        if (settings.cleanModeAutoDismissEnabled) {
+            Spacer(modifier = Modifier.height(12.dp))
+            SizeSlider(
+                label = stringResource(R.string.clean_mode_auto_dismiss_time),
+                value = settings.cleanModeAutoDismissSeconds.toFloat(),
+                onValueChange = { onCleanAutoDismissSeconds(it.roundToInt()) },
+                valueRange = CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS.toFloat()..CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS.toFloat(),
+                defaultValue = CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS.toFloat(),
+                steps = CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS - CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS - 1,
+                valueText = "${settings.cleanModeAutoDismissSeconds}s",
+            )
+        }
+        if (settings.showCurrentTimeEnabled) {
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.hide_clock_in_minimal_mode),
+                checked = settings.hideClockInCleanMode,
+                onCheckedChange = onHideClockInCleanMode,
+            )
+        }
+    }
+    Spacer(modifier = Modifier.height(12.dp))
+    PreferenceToggle(
+        label = stringResource(R.string.timer_title_enabled),
+        checked = settings.timerTitleEnabled,
+        onCheckedChange = onTimerTitle,
+    )
+    if (settings.timerTitleEnabled) {
+        Spacer(modifier = Modifier.height(12.dp))
+        TitlePositionSelector(selectedPosition = settings.timerTitlePosition, onPositionSelected = onTimerTitlePosition)
+        Spacer(modifier = Modifier.height(12.dp))
+        SizeSlider(
+            label = stringResource(R.string.timer_title_size),
+            value = settings.timerTitleTextSizeSp,
+            onValueChange = onTimerTitleSize,
+            valueRange = 10f..48f,
+            defaultValue = 16f,
+        )
+        if (settings.cleanModeEnabled) {
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.timer_title_hide_in_clean_mode),
+                checked = settings.timerTitleHideInCleanMode,
+                onCheckedChange = onTimerTitleHideInCleanMode,
+            )
+        }
+    }
+}
 
 @Composable
 private fun PermissionsTabContent(
@@ -2511,230 +2665,6 @@ private fun AutomationMonoLine(text: String) {
         ),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-@Composable
-private fun DefaultTimerSettingsSection(
-    defaultSettings: com.fabiantorrestech.visualtimerplus.timer.TimerSettings,
-    defaultDurationMillis: Long,
-    onSettingsChanged: (com.fabiantorrestech.visualtimerplus.timer.TimerSettings) -> Unit,
-    onSetDefaultDuration: () -> Unit,
-) {
-    // Local draft: changes accumulate here and are committed only on "Save Defaults"
-    var draft by remember { mutableStateOf(defaultSettings) }
-
-    SectionCard(title = stringResource(R.string.default_timer_settings_title)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = stringResource(R.string.default_duration),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Surface(
-                onClick = onSetDefaultDuration,
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-            ) {
-                Text(
-                    text = if (defaultDurationMillis > 0L)
-                        defaultDurationMillis.formatClockTime()
-                    else stringResource(R.string.default_duration_not_set),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.sound),
-            checked = draft.soundEnabled,
-            onCheckedChange = { draft = draft.copy(soundEnabled = it) },
-        )
-        if (draft.soundEnabled) {
-            Spacer(modifier = Modifier.height(12.dp))
-            FinishedSoundRouteSelector(
-                selectedRoute = draft.finishedSoundRoute,
-                onRouteSelected = { draft = draft.copy(finishedSoundRoute = it) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            FinishedSoundVolumeSlider(
-                volumePercent = draft.finishedSoundVolumePercent,
-                onVolumeChanged = { draft = draft.copy(finishedSoundVolumePercent = it) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.ignore_silent_mode),
-                checked = draft.ignoreSilentMode,
-                onCheckedChange = { draft = draft.copy(ignoreSilentMode = it) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.override_muted_system_volume),
-                checked = draft.overrideMutedSystemVolume,
-                onCheckedChange = { draft = draft.copy(overrideMutedSystemVolume = it) },
-            )
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        FinishedVibrationSelector(
-            selectedMode = draft.finishedVibrationMode,
-            onModeSelected = { draft = draft.copy(finishedVibrationMode = it) },
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.keep_screen_awake),
-            checked = draft.keepScreenAwake,
-            onCheckedChange = { draft = draft.copy(keepScreenAwake = it) },
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        SizeSlider(
-            label = stringResource(R.string.center_time_size),
-            value = draft.centerTimeSizeSp,
-            onValueChange = { draft = draft.copy(centerTimeSizeSp = it) },
-            valueRange = 20f..80f,
-            defaultValue = 36f,
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.show_current_time),
-            checked = draft.showCurrentTimeEnabled,
-            onCheckedChange = { draft = draft.copy(showCurrentTimeEnabled = it, showClockSecondsEnabled = if (it) draft.showClockSecondsEnabled else false) },
-        )
-        if (draft.showCurrentTimeEnabled) {
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.show_seconds),
-                checked = draft.showClockSecondsEnabled,
-                onCheckedChange = { draft = draft.copy(showClockSecondsEnabled = it) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            ClockPositionSelector(
-                selectedPosition = draft.clockPosition,
-                onPositionSelected = { draft = draft.copy(clockPosition = it) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            SizeSlider(
-                label = stringResource(R.string.clock_size),
-                value = draft.clockTextSizeSp,
-                onValueChange = { draft = draft.copy(clockTextSizeSp = it) },
-                valueRange = 14f..60f,
-                defaultValue = 32f,
-            )
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.show_end_time),
-            checked = draft.showEndTimeEnabled,
-            onCheckedChange = { draft = draft.copy(showEndTimeEnabled = it) },
-        )
-        if (draft.showEndTimeEnabled) {
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.show_end_time_seconds),
-                checked = draft.showEndTimeSecondsEnabled,
-                onCheckedChange = { draft = draft.copy(showEndTimeSecondsEnabled = it) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            SizeSlider(
-                label = stringResource(R.string.end_time_size),
-                value = draft.endTimeSizeSp,
-                onValueChange = { draft = draft.copy(endTimeSizeSp = it) },
-                valueRange = 14f..60f,
-                defaultValue = 32f,
-            )
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.clockwise_mode),
-            checked = draft.clockwiseModeEnabled,
-            onCheckedChange = { draft = draft.copy(clockwiseModeEnabled = it) },
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.show_direction_indicator),
-            checked = draft.showDirectionIndicator,
-            onCheckedChange = { draft = draft.copy(showDirectionIndicator = it) },
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.full_clock_mode),
-            checked = draft.fullClockMode,
-            onCheckedChange = { draft = draft.copy(fullClockMode = it) },
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.clean_mode),
-            checked = draft.cleanModeEnabled,
-            onCheckedChange = { draft = draft.copy(cleanModeEnabled = it) },
-        )
-        if (draft.cleanModeEnabled) {
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.clean_mode_auto_dismiss_enabled),
-                checked = draft.cleanModeAutoDismissEnabled,
-                onCheckedChange = { draft = draft.copy(cleanModeAutoDismissEnabled = it) },
-            )
-            if (draft.cleanModeAutoDismissEnabled) {
-                Spacer(modifier = Modifier.height(12.dp))
-                SizeSlider(
-                    label = stringResource(R.string.clean_mode_auto_dismiss_time),
-                    value = draft.cleanModeAutoDismissSeconds.toFloat(),
-                    onValueChange = { draft = draft.copy(cleanModeAutoDismissSeconds = it.roundToInt()) },
-                    valueRange = CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS.toFloat()..CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS.toFloat(),
-                    defaultValue = CLEAN_MODE_AUTO_DISMISS_DEFAULT_SECONDS.toFloat(),
-                    steps = CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS - CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS - 1,
-                    valueText = "${draft.cleanModeAutoDismissSeconds}s",
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.timer_title_enabled),
-            checked = draft.timerTitleEnabled,
-            onCheckedChange = { draft = draft.copy(timerTitleEnabled = it) },
-        )
-        if (draft.timerTitleEnabled) {
-            Spacer(modifier = Modifier.height(12.dp))
-            TitlePositionSelector(
-                selectedPosition = draft.timerTitlePosition,
-                onPositionSelected = { draft = draft.copy(timerTitlePosition = it) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            SizeSlider(
-                label = stringResource(R.string.timer_title_size),
-                value = draft.timerTitleTextSizeSp,
-                onValueChange = { draft = draft.copy(timerTitleTextSizeSp = it) },
-                valueRange = 10f..48f,
-                defaultValue = 16f,
-            )
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        PreferenceToggle(
-            label = stringResource(R.string.prompt_before_start),
-            checked = draft.promptBeforeStart,
-            onCheckedChange = { draft = draft.copy(promptBeforeStart = it) },
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Surface(
-            onClick = { onSettingsChanged(draft) },
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.align(Alignment.End),
-        ) {
-            Text(
-                text = stringResource(R.string.save_defaults),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-        }
-    }
 }
 
 @Composable

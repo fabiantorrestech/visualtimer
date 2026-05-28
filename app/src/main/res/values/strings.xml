@@ -249,6 +249,11 @@
 
     <!-- Settings tabs -->
     <string name="settings_tab_settings">Settings</string>
+    <string name="settings_tab_appearance">Appearance</string>
+    <string name="settings_tab_behavior">Behavior</string>
+    <string name="settings_tab_notifications">Notifications</string>
+    <string name="settings_tab_overlay">Overlay</string>
+    <string name="settings_tab_extra">Extra</string>
     <string name="settings_tab_permissions">Permissions</string>
 
     <!-- Permissions tab -->
@@ -279,4 +284,11 @@
     <string name="automation_section_macrodroid">MacroDroid</string>
     <string name="automation_section_tasker">Tasker</string>
     <string name="automation_section_keymapper">KeyMapper</string>
+
+    <!-- Timer finished alert screen -->
+    <string name="finished_stop">Stop</string>
+    <string name="finished_add_time">+1:00</string>
+    <string name="finished_open_app">Open Visual Timer</string>
+    <string name="finished_also_finished">ALSO FINISHED</string>
+    <string name="finished_coming_up">COMING UP</string>
 </resources>

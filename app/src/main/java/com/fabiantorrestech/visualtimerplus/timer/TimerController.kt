@@ -45,7 +45,12 @@ class TimerController(context: Context) {
                 val reusableIndex = current.findReusableEmptyTimerIndex()
                 TimerRepository.update { state ->
                     if (reusableIndex == targetIndex) {
-                        state.copy(activeTimerIndex = targetIndex)
+                        val updated = state.timers.toMutableList()
+                        updated[targetIndex] = state.createBlankTimer(id = targetIndex)
+                        state.copy(
+                            timers = updated,
+                            activeTimerIndex = targetIndex,
+                        )
                     } else {
                         state.copy(
                             timers = state.timers + state.createBlankTimer(id = targetIndex),
@@ -165,7 +170,10 @@ class TimerController(context: Context) {
             }
 
             is TimerAction.SetDefaultTimerSettings -> {
-                TimerRepository.update { state -> state.copy(defaultTimerSettings = action.settings) }
+                TimerRepository.update { state ->
+                    state.copy(defaultTimerSettings = action.settings)
+                        .withIdleDefaultManagedTimersReset()
+                }
                 AutoBackupManager.scheduleBackup(appContext)
             }
 
@@ -175,7 +183,10 @@ class TimerController(context: Context) {
             }
 
             is TimerAction.SetAppDefaultDuration -> {
-                TimerRepository.update { state -> state.copy(defaultDurationMillis = action.durationMillis) }
+                TimerRepository.update { state ->
+                    state.copy(defaultDurationMillis = clampDuration(action.durationMillis))
+                        .withIdleDefaultManagedTimersReset()
+                }
                 AutoBackupManager.scheduleBackup(appContext)
             }
 
@@ -583,23 +594,29 @@ class TimerController(context: Context) {
                 if (timer.status != TimerStatus.Idle) {
                     startService(TimerService.ACTION_RESET, foreground = false, timerIndex = idx)
                 } else {
-                    val resetDuration = timer.defaultDurationMillis.takeIf { it > 0L } ?: 0L
-                    TimerRepository.updateTimer(idx) { t ->
-                        t.copy(
-                            status = TimerStatus.Idle,
-                            selectedDurationMillis = resetDuration,
-                            remainingMillis = resetDuration,
-                            targetEndTimeMillis = null,
-                            pausedRemainingMillis = null,
-                            originalDurationMillis = 0L,
-                            activeTimerName = "",
-                            activePresetId = null,
-                            activeLogEntryId = -1L,
-                            scheduleId = null,
-                            totalAdjustmentMillis = 0L,
-                            timeToDismissAccumulatedMillis = 0L,
-                            overtimeStartedAtMillis = null,
-                        )
+                    TimerRepository.update { state ->
+                        state.withTimer(idx) { t ->
+                            if (t.isDefaultManaged()) {
+                                state.resetToLatestDefaults(t)
+                            } else {
+                                val resetDuration = t.defaultDurationMillis.takeIf { it > 0L } ?: 0L
+                                t.copy(
+                                    status = TimerStatus.Idle,
+                                    selectedDurationMillis = resetDuration,
+                                    remainingMillis = resetDuration,
+                                    targetEndTimeMillis = null,
+                                    pausedRemainingMillis = null,
+                                    originalDurationMillis = 0L,
+                                    activeTimerName = "",
+                                    activePresetId = null,
+                                    activeLogEntryId = -1L,
+                                    scheduleId = null,
+                                    totalAdjustmentMillis = 0L,
+                                    timeToDismissAccumulatedMillis = 0L,
+                                    overtimeStartedAtMillis = null,
+                                )
+                            }
+                        }
                     }
                     syncNotification()
                 }
@@ -655,6 +672,13 @@ class TimerController(context: Context) {
     companion object {
         val NOTIFICATION_UPDATE_INTERVAL_STEPS = listOf(5, 10, 15, 30, 45, 60)
     }
+
+    private fun AppState.withIdleDefaultManagedTimersReset(): AppState =
+        copy(
+            timers = timers.map { timer ->
+                if (isReusableEmptyTimer(timer)) resetToLatestDefaults(timer) else timer
+            },
+        )
 
     private fun startService(
         action: String,

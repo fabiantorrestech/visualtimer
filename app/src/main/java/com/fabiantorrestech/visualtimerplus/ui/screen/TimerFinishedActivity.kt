@@ -1,49 +1,92 @@
 package com.fabiantorrestech.visualtimerplus.ui.screen
 
+import android.app.KeyguardManager
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.fabiantorrestech.visualtimerplus.MainActivity
+import com.fabiantorrestech.visualtimerplus.R
+import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
 import com.fabiantorrestech.visualtimerplus.timer.AppState
+import com.fabiantorrestech.visualtimerplus.timer.ThemeMode
 import com.fabiantorrestech.visualtimerplus.timer.TimerAction
 import com.fabiantorrestech.visualtimerplus.timer.TimerController
 import com.fabiantorrestech.visualtimerplus.timer.TimerInstance
 import com.fabiantorrestech.visualtimerplus.timer.TimerRepository
 import com.fabiantorrestech.visualtimerplus.timer.TimerStatus
-import com.fabiantorrestech.visualtimerplus.timer.ThemeMode
+import com.fabiantorrestech.visualtimerplus.ui.component.VisualTimerCanvas
+import com.fabiantorrestech.visualtimerplus.ui.theme.TimerRed
 import com.fabiantorrestech.visualtimerplus.ui.theme.VisualTimerPlusTheme
 import com.fabiantorrestech.visualtimerplus.util.formatClockTime
+import com.fabiantorrestech.visualtimerplus.util.formatWallClockEndTime
+import kotlin.math.min
 
 class TimerFinishedActivity : ComponentActivity() {
 
     private lateinit var controller: TimerController
+    private val activityCreatedAtMillis = System.currentTimeMillis()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,110 +104,405 @@ class TimerFinishedActivity : ComponentActivity() {
                 ThemeMode.Light -> false
                 else -> systemDark
             }
-            VisualTimerPlusTheme(isDark = isDark, oledBlackEnabled = appState.isOledMode) {
+            VisualTimerPlusTheme(isDark = isDark, oledBlackEnabled = appState.isOledMode, customFontPath = appState.customFontPath) {
                 TimerFinishedScreen(
                     appState = appState,
-                    onDismiss = { timerIndex -> controller.dispatch(TimerAction.DismissFinished(timerIndex)) },
-                    onRestart = { timerIndex -> controller.dispatch(TimerAction.Restart(timerIndex)) },
+                    activityCreatedAtMillis = activityCreatedAtMillis,
+                    onDismiss = { id -> controller.dispatch(TimerAction.DismissFinished(id)) },
+                    onAddTime = { id -> controller.dispatch(TimerAction.AdjustDuration(60_000L, id)) },
+                    onRestart = { id -> controller.dispatch(TimerAction.Restart(id)) },
+                    onOpenApp = { id -> openApp(id) },
                     onClose = { finish() },
                 )
             }
         }
+    }
+
+    private fun openApp(timerIndex: Int) {
+        val keyguardManager = getSystemService(KeyguardManager::class.java)
+        if (keyguardManager.isKeyguardLocked) {
+            keyguardManager.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
+                override fun onDismissSucceeded() {
+                    launchMainActivity(timerIndex)
+                    finish()
+                }
+            })
+        } else {
+            launchMainActivity(timerIndex)
+            finish()
+        }
+    }
+
+    private fun launchMainActivity(timerIndex: Int) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            putExtra(TimerNotificationManager.EXTRA_TARGET_TIMER_INDEX, timerIndex)
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        startActivity(intent)
     }
 }
 
 @Composable
 private fun TimerFinishedScreen(
     appState: AppState,
+    activityCreatedAtMillis: Long,
     onDismiss: (Int) -> Unit,
+    onAddTime: (Int) -> Unit,
     onRestart: (Int) -> Unit,
+    onOpenApp: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
-    val finishedTimers = appState.timers.filter {
-        it.status == TimerStatus.Finished || it.status == TimerStatus.Overtime
+    val overtimeTimers = appState.timers.filter { it.status == TimerStatus.Overtime }
+    val runningTimers = appState.timers.filter { it.status == TimerStatus.Running }
+
+    LaunchedEffect(overtimeTimers.isEmpty()) {
+        if (overtimeTimers.isEmpty()) onClose()
     }
 
-    LaunchedEffect(finishedTimers.isEmpty()) {
-        if (finishedTimers.isEmpty()) onClose()
+    val defaultFocused = overtimeTimers.maxByOrNull { it.currentOvertimeSegmentMillis }
+        ?: runningTimers.firstOrNull()
+        ?: return
+
+    var focusedTimerId by rememberSaveable { mutableStateOf<Int?>(null) }
+    val allEligible = overtimeTimers + runningTimers
+    val focusedTimer = allEligible.find { it.id == focusedTimerId } ?: defaultFocused
+
+    val alsoFinishedList = overtimeTimers
+        .filter { it.id != focusedTimer.id }
+        .sortedByDescending { it.currentOvertimeSegmentMillis }
+
+    val now = System.currentTimeMillis()
+    val comingUpList = runningTimers
+        .filter { it.id != focusedTimer.id }
+        .sortedBy { it.targetEndTimeMillis?.minus(now) ?: it.remainingMillis }
+
+    var currentTime by remember { mutableStateOf(formatWallClockEndTime(System.currentTimeMillis())) }
+    LaunchedEffect(Unit) {
+        // Sync to the next minute boundary, then tick every 60s
+        delay(60_000L - System.currentTimeMillis() % 60_000L)
+        while (true) {
+            currentTime = formatWallClockEndTime(System.currentTimeMillis())
+            delay(60_000L)
+        }
     }
 
-    val timer = finishedTimers.firstOrNull() ?: return
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(modifier = Modifier.fillMaxSize()) {
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(
-                text = "Time's Up!",
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-            )
-
-            if (timer.activeTimerName.isNotBlank()) {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = timer.activeTimerName,
-                    fontSize = 24.sp,
-                    color = Color.White.copy(alpha = 0.8f),
-                    textAlign = TextAlign.Center,
-                )
-            }
-
-            if (timer.status == TimerStatus.Overtime) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "+${timer.currentOvertimeSegmentMillis.formatClockTime()}",
-                    fontSize = 20.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center,
-                )
-            }
-
-            if (finishedTimers.size > 1) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "+ ${finishedTimers.size - 1} more",
-                    fontSize = 16.sp,
-                    color = Color.White.copy(alpha = 0.5f),
-                    textAlign = TextAlign.Center,
-                )
-            }
-
-            Spacer(Modifier.height(48.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            // Clock pinned top-left, below system status bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 2.dp),
+                contentAlignment = Alignment.CenterStart,
             ) {
-                OutlinedButton(
-                    onClick = { onDismiss(timer.id) },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                ) {
-                    Text(text = "Dismiss", fontSize = 16.sp)
+                Text(
+                    text = currentTime,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                )
+            }
+
+            // Scrollable, vertically centered main content
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+
+                if (focusedTimer.activeTimerName.isNotBlank()) {
+                    Text(
+                        text = focusedTimer.activeTimerName,
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Light,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 24.dp),
+                    )
+                    Spacer(Modifier.height(16.dp))
+                } else {
+                    Spacer(Modifier.height(8.dp))
                 }
-                Button(
-                    onClick = { onRestart(timer.id) },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = Color.White,
-                    ),
+
+                // Ring — 88% screen width, layered: canvas track → overtime overlay → gesture blocker → center text
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.88f)
+                        .aspectRatio(1f),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text(text = "Restart", fontSize = 16.sp)
+                    // Canvas: blinks in overtime; displayMillisOverride=0L gives clean dark track circle
+                    VisualTimerCanvas(
+                        timer = focusedTimer,
+                        onPreviewDurationChanged = {},
+                        onDragCommit = {},
+                        modifier = Modifier.fillMaxSize(),
+                        isOledMode = appState.isOledMode,
+                        displayMillisOverride = if (focusedTimer.status == TimerStatus.Overtime) 0L else null,
+                    )
+
+                    // Overtime ring overlay: pulsing glow + growing arc (one rotation per 60s)
+                    if (focusedTimer.status == TimerStatus.Overtime) {
+                        OvertimeRingOverlay(
+                            overtimeMillis = focusedTimer.currentOvertimeSegmentMillis,
+                            modifier = Modifier.matchParentSize(),
+                        )
+                    }
+
+                    // Consume all touch events so the canvas drag gesture can't fire
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                                    }
+                                }
+                            },
+                    )
+
+                    if (focusedTimer.status == TimerStatus.Overtime) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = stringResource(R.string.status_overtime).uppercase(),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                letterSpacing = 3.sp,
+                            )
+                            Text(
+                                text = "+${focusedTimer.currentOvertimeSegmentMillis.formatClockTime()}",
+                                style = MaterialTheme.typography.displayLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(28.dp))
+
+                // Action buttons: small pill · large circle Stop · small pill
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilledTonalButton(
+                        onClick = { onAddTime(focusedTimer.id) },
+                        modifier = Modifier.height(48.dp),
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                    ) {
+                        Text(
+                            stringResource(R.string.finished_add_time),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                    Button(
+                        onClick = { onDismiss(focusedTimer.id) },
+                        modifier = Modifier.size(80.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ),
+                        contentPadding = PaddingValues(0.dp),
+                    ) {
+                        Text(
+                            stringResource(R.string.finished_stop),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                    FilledTonalButton(
+                        onClick = { onRestart(focusedTimer.id) },
+                        modifier = Modifier.height(48.dp),
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                    ) {
+                        Text(
+                            "↻ ${stringResource(R.string.restart)}",
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                AssistChip(
+                    onClick = { onOpenApp(focusedTimer.id) },
+                    modifier = Modifier.height(40.dp),
+                    label = {
+                        Text(
+                            stringResource(R.string.finished_open_app),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    },
+                )
+
+                if (alsoFinishedList.isNotEmpty() || comingUpList.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    Spacer(Modifier.height(4.dp))
+
+                    if (alsoFinishedList.isNotEmpty()) {
+                        Text(
+                            text = stringResource(R.string.finished_also_finished),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                        alsoFinishedList.forEach { timer ->
+                            TimerListRow(
+                                timer = timer,
+                                activityCreatedAtMillis = activityCreatedAtMillis,
+                                onClick = { focusedTimerId = timer.id },
+                            )
+                        }
+                    }
+
+                    if (comingUpList.isNotEmpty()) {
+                        Text(
+                            text = stringResource(R.string.finished_coming_up),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                        comingUpList.forEach { timer ->
+                            TimerListRow(
+                                timer = timer,
+                                activityCreatedAtMillis = activityCreatedAtMillis,
+                                onClick = { focusedTimerId = timer.id },
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+// Draws a pulsing glow ring + growing arc (one full rotation = 60 seconds of overtime)
+// layered on top of VisualTimerCanvas in overtime mode.
+@Composable
+private fun OvertimeRingOverlay(
+    overtimeMillis: Long,
+    modifier: Modifier = Modifier,
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "overtime-ring")
+    val glowPulse by infiniteTransition.animateFloat(
+        initialValue = 0.15f,
+        targetValue = 0.52f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1100, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "glowPulse",
+    )
+
+    // Clockwise from 12 o'clock; one full rotation = 60 seconds
+    val sweepAngle = (overtimeMillis % 60_000L).toFloat() / 60_000f * 360f
+
+    Canvas(modifier = modifier) {
+        val diameter = min(size.width, size.height)
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val radius = diameter / 2f
+        val strokeWidth = diameter * 0.09f
+        val arcRadius = radius - strokeWidth / 2f
+        val arcTopLeft = Offset(center.x - arcRadius, center.y - arcRadius)
+        val arcSize = Size(arcRadius * 2f, arcRadius * 2f)
+
+        // Pulsing glow: 4 concentric rings at increasing widths, fading outward
+        val glowSteps = 4
+        for (i in 1..glowSteps) {
+            val factor = i.toFloat() / glowSteps
+            drawCircle(
+                color = TimerRed.copy(alpha = glowPulse * (1f - factor * 0.65f)),
+                radius = arcRadius,
+                center = center,
+                style = Stroke(width = strokeWidth * (1f + factor)),
+            )
+        }
+
+        // Growing arc (clockwise, full color)
+        if (sweepAngle > 0f) {
+            drawArc(
+                color = TimerRed,
+                startAngle = -90f,
+                sweepAngle = sweepAngle,
+                useCenter = false,
+                topLeft = arcTopLeft,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimerListRow(
+    timer: TimerInstance,
+    activityCreatedAtMillis: Long,
+    onClick: () -> Unit,
+) {
+    val isFlashing = timer.status == TimerStatus.Overtime &&
+        (timer.overtimeStartedAtMillis ?: 0L) > activityCreatedAtMillis
+
+    val infiniteTransition = rememberInfiniteTransition(label = "flash-${timer.id}")
+    val flashPulse by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 0.45f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "flashAlpha",
+    )
+    val bgColor = if (isFlashing) TimerRed.copy(alpha = flashPulse) else Color.Transparent
+
+    val dotColor = if (timer.status == TimerStatus.Overtime) TimerRed else MaterialTheme.colorScheme.primary
+    val displayText = if (timer.status == TimerStatus.Overtime) {
+        "+${timer.currentOvertimeSegmentMillis.formatClockTime()}"
+    } else {
+        timer.displayMillis.formatClockTime()
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .background(bgColor)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(dotColor, shape = CircleShape),
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = timer.activeTimerName.ifBlank { "Timer ${timer.id + 1}" },
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = displayText,
+            style = MaterialTheme.typography.bodyLarge,
+            fontFamily = FontFamily.Monospace,
+            color = dotColor,
+        )
     }
 }
