@@ -23,6 +23,9 @@ object TimerRepository {
     private const val KEY_OVERLAY_SHOW_TIMER_NAME = "overlay_show_timer_name"
     private const val KEY_OVERLAY_TIMER_NAME_POSITION = "overlay_timer_name_position"
     private const val KEY_OVERLAY_SHOW_ON_LOCKSCREEN = "overlay_show_on_lockscreen"
+    private const val KEY_FINISHED_ALERT_MODE = "finished_alert_mode"
+    private const val KEY_SHOW_MISSING_FINISHED_ALERT_PERMISSIONS_BANNER =
+        "show_missing_finished_alert_permissions_banner"
     private const val KEY_AUTO_BACKUP_ENABLED = "auto_backup_enabled"
     private const val KEY_AUTO_OPEN_APP_AFTER_QUICK_START = "auto_open_app_after_quick_start"
     private const val KEY_QUICK_TIMER_LANDSCAPE_PLACEMENT = "quick_timer_landscape_placement"
@@ -183,6 +186,9 @@ object TimerRepository {
         val overlayTimerNamePosition = preferences.getString(KEY_OVERLAY_TIMER_NAME_POSITION, null)
             ?.let { name -> OverlayLabelPosition.entries.firstOrNull { it.name == name } }
             ?: OverlayLabelPosition.Top
+        val finishedAlertMode = preferences.getString(KEY_FINISHED_ALERT_MODE, null)
+            ?.let { name -> FinishedAlertMode.entries.firstOrNull { it.name == name } }
+            ?: FinishedAlertMode.NotificationAndOverlay
         val quickTimerLandscapePlacement = preferences.getString(KEY_QUICK_TIMER_LANDSCAPE_PLACEMENT, null)
             ?.let { name -> QuickTimerLandscapePlacement.entries.firstOrNull { it.name == name } }
             ?: QuickTimerLandscapePlacement.Center
@@ -204,6 +210,11 @@ object TimerRepository {
             overlayShowTimerName = preferences.getBoolean(KEY_OVERLAY_SHOW_TIMER_NAME, false),
             overlayTimerNamePosition = overlayTimerNamePosition,
             overlayShowOnLockscreen = preferences.getBoolean(KEY_OVERLAY_SHOW_ON_LOCKSCREEN, false),
+            finishedAlertMode = finishedAlertMode,
+            showMissingFinishedAlertPermissionsBanner = preferences.getBoolean(
+                KEY_SHOW_MISSING_FINISHED_ALERT_PERMISSIONS_BANNER,
+                true,
+            ),
             autoBackupEnabled = preferences.getBoolean(KEY_AUTO_BACKUP_ENABLED, false),
             autoOpenAppAfterQuickStart = preferences.getBoolean(KEY_AUTO_OPEN_APP_AFTER_QUICK_START, true),
             quickTimerLandscapePlacement = quickTimerLandscapePlacement,
@@ -338,6 +349,11 @@ object TimerRepository {
             .putBoolean(KEY_OVERLAY_SHOW_TIMER_NAME, state.overlayShowTimerName)
             .putString(KEY_OVERLAY_TIMER_NAME_POSITION, state.overlayTimerNamePosition.name)
             .putBoolean(KEY_OVERLAY_SHOW_ON_LOCKSCREEN, state.overlayShowOnLockscreen)
+            .putString(KEY_FINISHED_ALERT_MODE, state.finishedAlertMode.name)
+            .putBoolean(
+                KEY_SHOW_MISSING_FINISHED_ALERT_PERMISSIONS_BANNER,
+                state.showMissingFinishedAlertPermissionsBanner,
+            )
             .putBoolean(KEY_AUTO_BACKUP_ENABLED, state.autoBackupEnabled)
             .putBoolean(KEY_AUTO_OPEN_APP_AFTER_QUICK_START, state.autoOpenAppAfterQuickStart)
             .putString(KEY_QUICK_TIMER_LANDSCAPE_PLACEMENT, state.quickTimerLandscapePlacement.name)

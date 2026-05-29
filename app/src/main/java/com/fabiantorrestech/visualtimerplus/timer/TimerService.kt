@@ -379,13 +379,20 @@ class TimerService : Service() {
         }
 
         val timer = TimerRepository.getTimer(index)
+        val state = TimerRepository.getState()
+        val alertRequirements = FinishedAlertRequirementResolver.resolve(applicationContext, state)
         // Latest-timer override: if a previous alert is active, stop it first
         if (lastAlertedTimerIndex >= 0) {
             stopFinishedAlertEffects()
         }
         lastAlertedTimerIndex = index
         alertFinished(timer.settings)
-        notificationManager.postAlarmTriggerNotification(timer)
+        // Always post a separate alarm notification so notify() reliably fires the full-screen
+        // intent. Foreground-service notification updates alone don't guarantee it on all versions.
+        notificationManager.postAlarmTriggerNotification(
+            timer,
+            shouldLaunchFinishedPage = alertRequirements.shouldUseFinishedPage,
+        )
 
         if (!TimerRepository.isAppForeground) {
             promoteToForeground()

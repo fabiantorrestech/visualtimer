@@ -6,6 +6,9 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -22,13 +25,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -76,6 +83,7 @@ import com.fabiantorrestech.visualtimerplus.timer.TimerController
 import com.fabiantorrestech.visualtimerplus.timer.TimerInstance
 import com.fabiantorrestech.visualtimerplus.timer.TimerRepository
 import com.fabiantorrestech.visualtimerplus.timer.TimerStatus
+import com.fabiantorrestech.visualtimerplus.overlay.TimerOverlayManager
 import com.fabiantorrestech.visualtimerplus.ui.component.VisualTimerCanvas
 import com.fabiantorrestech.visualtimerplus.ui.theme.TimerRed
 import com.fabiantorrestech.visualtimerplus.ui.theme.VisualTimerPlusTheme
@@ -87,14 +95,22 @@ class TimerFinishedActivity : ComponentActivity() {
 
     private lateinit var controller: TimerController
     private val activityCreatedAtMillis = System.currentTimeMillis()
+    private var launchedMainActivity = false
+    private var launchedTargetTimerIndex = -1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setShowWhenLocked(true)
         setTurnScreenOn(true)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.statusBars())
+        }
 
         controller = TimerController(applicationContext)
+        launchedTargetTimerIndex = intent?.getIntExtra(TimerNotificationManager.EXTRA_TARGET_TIMER_INDEX, -1) ?: -1
 
         setContent {
             val appState by TimerRepository.state.collectAsStateWithLifecycle()
@@ -108,14 +124,45 @@ class TimerFinishedActivity : ComponentActivity() {
                 TimerFinishedScreen(
                     appState = appState,
                     activityCreatedAtMillis = activityCreatedAtMillis,
+                    launchTargetTimerIndex = launchedTargetTimerIndex,
                     onDismiss = { id -> controller.dispatch(TimerAction.DismissFinished(id)) },
-                    onAddTime = { id -> controller.dispatch(TimerAction.AdjustDuration(60_000L, id)) },
+                    onAddTime = ::addTimeAndOpenApp,
                     onRestart = { id -> controller.dispatch(TimerAction.Restart(id)) },
                     onOpenApp = { id -> openApp(id) },
                     onClose = { finish() },
                 )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        setFinishedPageForeground(true)
+    }
+
+    override fun onStop() {
+        if (!launchedMainActivity) {
+            setFinishedPageForeground(false)
+        }
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        if (!launchedMainActivity) {
+            setFinishedPageForeground(false)
+        }
+        super.onDestroy()
+    }
+
+    private fun setFinishedPageForeground(foreground: Boolean) {
+        TimerRepository.setAppForeground(foreground)
+        TimerOverlayManager.setAppForeground(foreground)
+    }
+
+    private fun addTimeAndOpenApp(timerIndex: Int) {
+        if (TimerRepository.getTimer(timerIndex).status != TimerStatus.Overtime) return
+        controller.addTimeDuringOvertime(timerIndex, 60_000L)
+        openApp(timerIndex)
     }
 
     private fun openApp(timerIndex: Int) {
@@ -134,6 +181,7 @@ class TimerFinishedActivity : ComponentActivity() {
     }
 
     private fun launchMainActivity(timerIndex: Int) {
+        launchedMainActivity = true
         val intent = Intent(this, MainActivity::class.java).apply {
             putExtra(TimerNotificationManager.EXTRA_TARGET_TIMER_INDEX, timerIndex)
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -146,6 +194,7 @@ class TimerFinishedActivity : ComponentActivity() {
 private fun TimerFinishedScreen(
     appState: AppState,
     activityCreatedAtMillis: Long,
+    launchTargetTimerIndex: Int,
     onDismiss: (Int) -> Unit,
     onAddTime: (Int) -> Unit,
     onRestart: (Int) -> Unit,
@@ -159,12 +208,13 @@ private fun TimerFinishedScreen(
         if (overtimeTimers.isEmpty()) onClose()
     }
 
-    val defaultFocused = overtimeTimers.maxByOrNull { it.currentOvertimeSegmentMillis }
+    val allEligible = overtimeTimers + runningTimers
+    val defaultFocused = allEligible.find { it.id == launchTargetTimerIndex }
+        ?: overtimeTimers.maxByOrNull { it.currentOvertimeSegmentMillis }
         ?: runningTimers.firstOrNull()
         ?: return
 
-    var focusedTimerId by rememberSaveable { mutableStateOf<Int?>(null) }
-    val allEligible = overtimeTimers + runningTimers
+    var focusedTimerId by rememberSaveable { mutableStateOf<Int?>(launchTargetTimerIndex.takeIf { it >= 0 }) }
     val focusedTimer = allEligible.find { it.id == focusedTimerId } ?: defaultFocused
 
     val alsoFinishedList = overtimeTimers
@@ -186,14 +236,18 @@ private fun TimerFinishedScreen(
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.displayCutout.union(WindowInsets.navigationBars)),
+        color = MaterialTheme.colorScheme.background,
+    ) {
         Column(modifier = Modifier.fillMaxSize()) {
 
             // Clock pinned top-left, below system status bar
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .statusBarsPadding()
                     .padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 2.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {

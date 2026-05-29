@@ -17,6 +17,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -29,6 +30,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -45,6 +47,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -67,8 +70,6 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -128,6 +129,10 @@ import com.fabiantorrestech.visualtimerplus.timer.findNextAvailableTimerSlot
 import com.fabiantorrestech.visualtimerplus.timer.CLEAN_MODE_AUTO_DISMISS_MAX_SECONDS
 import com.fabiantorrestech.visualtimerplus.timer.CLEAN_MODE_AUTO_DISMISS_MIN_SECONDS
 import com.fabiantorrestech.visualtimerplus.timer.ClockPosition
+import com.fabiantorrestech.visualtimerplus.timer.FinishedAlertMode
+import com.fabiantorrestech.visualtimerplus.timer.FinishedAlertPermission
+import com.fabiantorrestech.visualtimerplus.timer.FinishedAlertRequirements
+import com.fabiantorrestech.visualtimerplus.timer.FinishedAlertRequirementResolver
 import com.fabiantorrestech.visualtimerplus.timer.FinishedSoundRoute
 import com.fabiantorrestech.visualtimerplus.timer.FinishedVibrationMode
 import com.fabiantorrestech.visualtimerplus.timer.NotificationMode
@@ -177,6 +182,7 @@ fun TimerScreen(
     openPresetsOnLaunch: Boolean = false,
 ) {
     val appState by stateFlow.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val timer = appState.activeTimer
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -191,6 +197,9 @@ fun TimerScreen(
         (currentPageTimer.status == TimerStatus.Running || currentPageTimer.status == TimerStatus.Overtime)
 
     var showAllTimersSheet by rememberSaveable { mutableStateOf(false) }
+    // Coordination flag: set by the inner hero-card handler when it claims a long press so the
+    // outer Box handler knows not to also open the AllTimers sheet.
+    var centerLongPressHandled by remember { mutableStateOf(false) }
     var showSettingsSheet by rememberSaveable { mutableStateOf(false) }
     var showPresetsSheet by rememberSaveable { mutableStateOf(openPresetsOnLaunch) }
     var showDurationPicker by rememberSaveable { mutableStateOf(false) }
@@ -198,6 +207,36 @@ fun TimerScreen(
     var showNameDialog by rememberSaveable { mutableStateOf(false) }
     var showStartNamePrompt by rememberSaveable { mutableStateOf(false) }
     var showDeleteTimerDialog by rememberSaveable { mutableStateOf(false) }
+    var permissionsRefreshTick by remember { mutableIntStateOf(0) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                permissionsRefreshTick += 1
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val finishedAlertRequirements = remember(
+        appState.finishedAlertMode,
+        appState.overlayShowOnLockscreen,
+        appState.showMissingFinishedAlertPermissionsBanner,
+        overlayPermissionGranted,
+        accessibilityServiceConnected,
+        permissionsRefreshTick,
+    ) {
+        FinishedAlertRequirementResolver.resolve(
+            context = context,
+            appState = appState,
+            accessibilityServiceConnected = accessibilityServiceConnected,
+            overlayPermissionGranted = overlayPermissionGranted,
+        )
+    }
+    val bannerVisible = appState.showMissingFinishedAlertPermissionsBanner &&
+        finishedAlertRequirements.missingPermissions.isNotEmpty()
 
     // Tracks which activeTimerIndex was last set BY the pager, to prevent the reverse
     // sync from animating back when the user swipes faster than state propagates.
@@ -397,48 +436,85 @@ fun TimerScreen(
     val tapToToggleState = rememberUpdatedState(appState.tapToToggleMinimalMode)
     val cleanModeUiAwakeState = rememberUpdatedState(cleanModeUiAwake)
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .then(bgModifier)
-            .pointerInput(appState.timers.size) {
-                // detectTapGestures can't be used here because HorizontalPager consumes
-                // down events. requireUnconsumed=false lets us see the down regardless.
-                // PointerEventPass.Final lets us see whether a child (e.g. PageIndicatorBar)
-                // consumed the event — if so we skip our handlers.
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val startPos = down.position
-                    var slopExceeded = false
-                    var consumed = false
-                    val longPressed = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                        do {
-                            val event = awaitPointerEvent(PointerEventPass.Final)
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (change.isConsumed && !(cleanModeState.value && !cleanModeUiAwakeState.value)) { consumed = true; break }
-                            if (!change.pressed) break
-                            if ((change.position - startPos).getDistance() > viewConfiguration.touchSlop) {
-                                slopExceeded = true; break
+            .animateContentSize(),
+    ) {
+        AnimatedVisibility(
+            visible = bannerVisible,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut(),
+        ) {
+            FinishedAlertPermissionBanner(
+                missingPermissions = finishedAlertRequirements.missingPermissions,
+                onOpenSettings = {
+                    context.startActivity(
+                        FinishedAlertRequirementResolver.settingsIntent(
+                            context,
+                            finishedAlertRequirements.missingPermissions.first(),
+                        ),
+                    )
+                },
+                onNeverShowAgain = {
+                    onAction(TimerAction.SetShowMissingFinishedAlertPermissionsBanner(false))
+                },
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
+                    .padding(top = 2.dp, bottom = 0.dp),
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .pointerInput(appState.timers.size) {
+                    // detectTapGestures can't be used here because HorizontalPager consumes
+                    // down events. requireUnconsumed=false lets us see the down regardless.
+                    // PointerEventPass.Final lets us see whether a child (e.g. PageIndicatorBar)
+                    // consumed the event — if so we skip our handlers.
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val startPos = down.position
+                        var slopExceeded = false
+                        var consumed = false
+                        val longPressed = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis + 1L) {
+                            do {
+                                val event = awaitPointerEvent(PointerEventPass.Final)
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (change.isConsumed && !(cleanModeState.value && !cleanModeUiAwakeState.value)) { consumed = true; break }
+                                if (!change.pressed) break
+                                if ((change.position - startPos).getDistance() > viewConfiguration.touchSlop) {
+                                    slopExceeded = true; break
+                                }
+                            } while (true)
+                        } == null
+                        val isTap = !longPressed && !slopExceeded && !consumed
+                        when {
+                            longPressed -> {
+                                // The inner hero-card handler uses the standard longPressTimeoutMillis;
+                                // this outer handler uses +1 ms so the inner always fires first and
+                                // can set centerLongPressHandled before we reach this check.
+                                if (!centerLongPressHandled) showAllTimersSheet = true
+                                centerLongPressHandled = false
                             }
-                        } while (true)
-                    } == null
-                    val isTap = !longPressed && !slopExceeded && !consumed
-                    when {
-                        longPressed -> showAllTimersSheet = true
-                        isTap &&
-                            tapToToggleState.value &&
-                            cleanModeState.value &&
-                            (pageTimerStatusState.value == TimerStatus.Running || pageTimerStatusState.value == TimerStatus.Overtime) -> {
-                            cleanModeUiAwake = !cleanModeUiAwakeState.value
-                            if (cleanModeUiAwake) {
-                                cleanModeActivityTick += 1
+                            isTap &&
+                                tapToToggleState.value &&
+                                cleanModeState.value &&
+                                (pageTimerStatusState.value == TimerStatus.Running || pageTimerStatusState.value == TimerStatus.Overtime) -> {
+                                cleanModeUiAwake = !cleanModeUiAwakeState.value
+                                if (cleanModeUiAwake) {
+                                    cleanModeActivityTick += 1
+                                }
                             }
                         }
                     }
-                }
-            },
-    ) {
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { pageIndex ->
+                },
+        ) {
+            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { pageIndex ->
             if (pageIndex < appState.timers.size) {
                 val pageTimer = appState.timers[pageIndex]
                 val pagedOnAction: (TimerAction) -> Unit = { onAction(it.withTimerIndex(pageIndex)) }
@@ -462,7 +538,10 @@ fun TimerScreen(
                         onOpenSettings = { showSettingsSheet = true; awakenMinimalUi() },
                         onOpenLog = onOpenLog,
                         onOpenPresets = { showPresetsSheet = true },
-                        onOpenDurationPicker = { if (pageTimer.status == TimerStatus.Idle) showDurationPicker = true },
+                        onOpenDurationPicker = {
+                            centerLongPressHandled = true
+                            if (pageTimer.status == TimerStatus.Idle) showDurationPicker = true
+                        },
                         onNameChipClick = { showNameDialog = true },
                         onClearPreset = {
                             pagedOnAction(TimerAction.SetActivePresetId(null))
@@ -483,6 +562,7 @@ fun TimerScreen(
                     PortraitLayout(
                         appState = appState,
                         timer = pageTimer,
+                        compactLayout = bannerVisible,
                         isCleanModeActive = pageIsCleanModeActive,
                         showTopClock = pageShowTopClock,
                         minimalUiAlpha = minimalUiAlpha,
@@ -490,7 +570,10 @@ fun TimerScreen(
                         onOpenSettings = { showSettingsSheet = true; awakenMinimalUi() },
                         onOpenLog = onOpenLog,
                         onOpenPresets = { showPresetsSheet = true },
-                        onOpenDurationPicker = { if (pageTimer.status == TimerStatus.Idle) showDurationPicker = true },
+                        onOpenDurationPicker = {
+                            centerLongPressHandled = true
+                            if (pageTimer.status == TimerStatus.Idle) showDurationPicker = true
+                        },
                         onNameChipClick = { showNameDialog = true },
                         onClearPreset = {
                             pagedOnAction(TimerAction.SetActivePresetId(null))
@@ -513,58 +596,59 @@ fun TimerScreen(
             } else {
                 AddTimerPage(onAdd = { handleAddTimer() })
             }
-        }
+            }
 
-        PageIndicatorBar(
-            timers = appState.timers,
-            pagerState = pagerState,
-            isCleanModeActive = isCleanModeActive,
-            hideInCleanMode = appState.hidePageDotsInCleanMode,
-            onLongPress = { showAllTimersSheet = true },
-            onScrollToPage = { page -> coroutineScope.launch { pagerState.animateScrollToPage(page) } },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 16.dp),
-        )
-
-        if (!isCleanModeActive) {
-            Column(
+            PageIndicatorBar(
+                timers = appState.timers,
+                pagerState = pagerState,
+                isCleanModeActive = isCleanModeActive,
+                hideInCleanMode = appState.hidePageDotsInCleanMode,
+                onLongPress = { showAllTimersSheet = true },
+                onScrollToPage = { page -> coroutineScope.launch { pagerState.animateScrollToPage(page) } },
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 20.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.End,
-            ) {
-                if (appState.timers.size > 1) {
-                    SmallFloatingActionButton(
-                        onClick = { showDeleteTimerDialog = true },
-                        shape = RoundedCornerShape(12.dp),
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        elevation = FloatingActionButtonDefaults.elevation(),
-                    ) {
-                        Text(text = "−", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
-                }
-                if (appState.timers.size < 20) {
-                    SmallFloatingActionButton(
-                        onClick = { handleAddTimer() },
-                        shape = RoundedCornerShape(12.dp),
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        elevation = FloatingActionButtonDefaults.elevation(),
-                    ) {
-                        Text(text = "+", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
-                }
-                FloatingActionButton(
-                    onClick = { showPresetsSheet = true },
-                    shape = RoundedCornerShape(16.dp),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    elevation = FloatingActionButtonDefaults.loweredElevation(),
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp),
+            )
+
+            if (!isCleanModeActive) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 20.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.End,
                 ) {
-                    Text(text = "☰", style = MaterialTheme.typography.titleLarge)
+                    if (appState.timers.size > 1) {
+                        SmallFloatingActionButton(
+                            onClick = { showDeleteTimerDialog = true },
+                            shape = RoundedCornerShape(12.dp),
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            elevation = FloatingActionButtonDefaults.elevation(),
+                        ) {
+                            Text(text = "−", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (appState.timers.size < 20) {
+                        SmallFloatingActionButton(
+                            onClick = { handleAddTimer() },
+                            shape = RoundedCornerShape(12.dp),
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            elevation = FloatingActionButtonDefaults.elevation(),
+                        ) {
+                            Text(text = "+", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    FloatingActionButton(
+                        onClick = { showPresetsSheet = true },
+                        shape = RoundedCornerShape(16.dp),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        elevation = FloatingActionButtonDefaults.loweredElevation(),
+                    ) {
+                        Text(text = "☰", style = MaterialTheme.typography.titleLarge)
+                    }
                 }
             }
         }
@@ -707,6 +791,7 @@ private fun liveCountdownText(timer: TimerInstance, now: Long): String =
 private fun PortraitLayout(
     appState: AppState,
     timer: TimerInstance,
+    compactLayout: Boolean,
     isCleanModeActive: Boolean,
     showTopClock: Boolean,
     minimalUiAlpha: Float,
@@ -789,223 +874,440 @@ private fun PortraitLayout(
         onAction(action)
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(
-                WindowInsets.statusBars
-                    .union(WindowInsets.displayCutout)
-                    .union(WindowInsets.navigationBars),
-            )
-            .padding(horizontal = 20.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        // Timer arc — anchored at center so top/bottom content never shifts its position
-        HeroTimerCard(
-            timer = timer,
-            displayAlpha = if (isCleanModeActive) minimalUiAlpha else 1f,
-            previewDurationMillis = effectivePreviewDurationMillis,
-            onPreviewDurationChanged = { previewDurationMillis = it },
-            onDragCommit = ::commitPreviewDuration,
-            onCenterTap = {
-                when (timer.status) {
-                    TimerStatus.Idle    -> handleIdleCenterTap()
-                    TimerStatus.Running -> onAction(TimerAction.Pause())
-                    TimerStatus.Paused  -> onAction(TimerAction.Resume())
-                    else                -> {}
-                }
-            },
-            onCenterLongPress = onOpenDurationPicker,
-            modifier = Modifier.fillMaxWidth().aspectRatio(1f),
-            isOledMode = appState.isOledMode,
-            onDragActiveChanged = { dragging ->
-                isDragging = dragging
-            },
-        )
-
-        // Top overlay: clock, end-time, status row, name chip
-        Column(
+    if (compactLayout) {
+        BoxWithConstraints(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .padding(top = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = 20.dp),
         ) {
+            val heroSize = minOf(maxWidth * 0.64f, maxHeight * 0.31f)
             val clockAlpha = if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f
-            if (showTopClock) {
-                Box(modifier = Modifier.alpha(clockAlpha)) {
-                    Crossfade(targetState = isDragging, label = "portraitDragReadout") { dragging ->
-                        if (dragging) {
-                            Text(
-                                text = effectiveDisplayMillis.formatClockTime(),
-                                style = MaterialTheme.typography.headlineLarge.copy(
-                                    fontSize = settings.clockTextSizeSp.sp,
-                                    lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
-                                ),
-                                color = Color(0xFFF59E0B),
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = when (settings.clockPosition) {
-                                    ClockPosition.Left -> TextAlign.Start
-                                    ClockPosition.Center -> TextAlign.Center
-                                    ClockPosition.Right -> TextAlign.End
-                                },
-                            )
+            val showEndTime = timer.status != TimerStatus.Finished && effectiveDisplayMillis > 0L &&
+                (settings.showEndTimeEnabled || timer.status == TimerStatus.Idle)
+            val showAnyTopRow = showTopClock || showEndTime || isDragging
+
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 0.dp, end = 52.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        if (showTopClock) {
+                            Box(modifier = Modifier.alpha(clockAlpha)) {
+                                Crossfade(targetState = isDragging, label = "compactPortraitDragReadout") { dragging ->
+                                    if (dragging) {
+                                        Text(
+                                            text = effectiveDisplayMillis.formatClockTime(),
+                                            style = MaterialTheme.typography.headlineLarge.copy(
+                                                fontSize = settings.clockTextSizeSp.sp,
+                                                lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
+                                            ),
+                                            color = Color(0xFFF59E0B),
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = when (settings.clockPosition) {
+                                                ClockPosition.Left -> TextAlign.Start
+                                                ClockPosition.Center -> TextAlign.Center
+                                                ClockPosition.Right -> TextAlign.End
+                                            },
+                                        )
+                                    } else {
+                                        CurrentTimeText(
+                                            showSeconds = settings.showClockSecondsEnabled,
+                                            clockPosition = settings.clockPosition,
+                                            clockTextSizeSp = settings.clockTextSizeSp,
+                                        )
+                                    }
+                                }
+                            }
                         } else {
-                            CurrentTimeText(
-                                showSeconds = settings.showClockSecondsEnabled,
+                            AnimatedVisibility(visible = isDragging) {
+                                Text(
+                                    text = effectiveDisplayMillis.formatClockTime(),
+                                    style = MaterialTheme.typography.headlineLarge.copy(
+                                        fontSize = settings.clockTextSizeSp.sp,
+                                        lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
+                                    ),
+                                    color = Color(0xFFF59E0B),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = when (settings.clockPosition) {
+                                        ClockPosition.Left -> TextAlign.Start
+                                        ClockPosition.Center -> TextAlign.Center
+                                        ClockPosition.Right -> TextAlign.End
+                                    },
+                                )
+                            }
+                        }
+
+                        AnimatedVisibility(
+                            visible = showEndTime,
+                            enter = fadeIn() + expandVertically(),
+                            exit = fadeOut() + shrinkVertically(),
+                        ) {
+                            EndTimeText(
+                                timer = timer,
                                 clockPosition = settings.clockPosition,
-                                clockTextSizeSp = settings.clockTextSizeSp,
+                                textSizeSp = settings.endTimeSizeSp,
+                                showSeconds = settings.showEndTimeSecondsEnabled,
+                                durationOverrideMillis = if (isDragging && isPreviewEditable) effectiveDurationForCommit else null,
+                                modifier = Modifier.alpha(clockAlpha),
                             )
+                        }
+
+                        if (showAnyTopRow) Spacer(modifier = Modifier.height(0.dp))
+                        else Spacer(modifier = Modifier.height(2.dp))
+
+                        StatusAndLogRow(
+                            timer = timer,
+                            isCleanModeActive = isCleanModeActive,
+                            minimalUiAlpha = minimalUiAlpha,
+                            enabled = minimalControlsInteractable,
+                            onOpenLog = onOpenLog,
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        TimerNameChip(
+                            timer = timer,
+                            isCleanModeActive = isCleanModeActive,
+                            minimalUiAlpha = minimalUiAlpha,
+                            enabled = minimalControlsInteractable,
+                            onNameChipClick = onNameChipClick,
+                            onClearPreset = onClearPreset,
+                        )
+                    }
+
+                    Surface(
+                        onClick = onOpenSettings,
+                        enabled = minimalControlsInteractable,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(36.dp)
+                            .alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Text(text = "⚙", style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
-            } else {
-                AnimatedVisibility(visible = isDragging) {
-                    Text(
-                        text = effectiveDisplayMillis.formatClockTime(),
-                        style = MaterialTheme.typography.headlineLarge.copy(
-                            fontSize = settings.clockTextSizeSp.sp,
-                            lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
-                        ),
-                        color = Color(0xFFF59E0B),
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                HeroTimerCard(
+                    timer = timer,
+                    displayAlpha = if (isCleanModeActive) minimalUiAlpha else 1f,
+                    previewDurationMillis = effectivePreviewDurationMillis,
+                    onPreviewDurationChanged = { previewDurationMillis = it },
+                    onDragCommit = ::commitPreviewDuration,
+                    onCenterTap = {
+                        when (timer.status) {
+                            TimerStatus.Idle    -> handleIdleCenterTap()
+                            TimerStatus.Running -> onAction(TimerAction.Pause())
+                            TimerStatus.Paused  -> onAction(TimerAction.Resume())
+                            else                -> {}
+                        }
+                    },
+                    onCenterLongPress = onOpenDurationPicker,
+                    modifier = Modifier.size(heroSize),
+                    isOledMode = appState.isOledMode,
+                    onDragActiveChanged = { dragging ->
+                        isDragging = dragging
+                    },
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    TimerTitleDisplay(timer = timer, isCleanModeActive = isCleanModeActive, minimalUiAlpha = minimalUiAlpha)
+
+                    CleanModeCanvasAdjustBar(
+                        visible = isCleanModeActive,
+                        controlsAlpha = minimalUiAlpha,
+                        enabled = minimalControlsInteractable,
+                        positiveOnly = timer.status == TimerStatus.Overtime,
+                        onAdjust = onCleanModeAdjust,
+                    )
+                    if (isCleanModeActive) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    if (!isCleanModeActive) {
+                        AnimatedVisibility(visible = timer.status == TimerStatus.Idle) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                SectionCard(title = stringResource(R.string.presets)) {
+                                    PresetRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onPresetSelected = { onAction(TimerAction.SetDuration(it)) },
+                                        enabled = true,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                            }
+                        }
+                        AnimatedVisibility(visible = timer.status != TimerStatus.Idle) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                SectionCard(title = stringResource(R.string.adjust_timer)) {
+                                    QuickAdjustRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onAdjust = onAdjust,
+                                        enabled = true,
+                                        positiveOnly = timer.status == TimerStatus.Overtime,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                            }
+                        }
+                    }
+
+                    TimerControls(
+                        timer = resolvedIdleTimer,
+                        onAction = ::handleTimerControlAction,
+                        enabled = minimalControlsInteractable,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
+                    )
+
+                    HiddenBottomControlsRestoreLayer(
+                        visible = isCleanModeActive && !cleanModeUiAwake && tapToToggleMinimalMode,
+                        onRestore = awakenMinimalUi,
                         modifier = Modifier.fillMaxWidth(),
-                        textAlign = when (settings.clockPosition) {
-                            ClockPosition.Left -> TextAlign.Start
-                            ClockPosition.Center -> TextAlign.Center
-                            ClockPosition.Right -> TextAlign.End
-                        },
                     )
                 }
             }
-
-            val showEndTime = timer.status != TimerStatus.Finished && effectiveDisplayMillis > 0L &&
-                (settings.showEndTimeEnabled || timer.status == TimerStatus.Idle)
-            AnimatedVisibility(
-                visible = showEndTime,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically(),
-            ) {
-                EndTimeText(
-                    timer = timer,
-                    clockPosition = settings.clockPosition,
-                    textSizeSp = settings.endTimeSizeSp,
-                    showSeconds = settings.showEndTimeSecondsEnabled,
-                    durationOverrideMillis = if (isDragging && isPreviewEditable) effectiveDurationForCommit else null,
-                    modifier = Modifier.alpha(
-                        if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f,
-                    ),
-                )
-            }
-
-            val showAnyTopRow = showTopClock || showEndTime || isDragging
-            if (showAnyTopRow) Spacer(modifier = Modifier.height(4.dp))
-            else Spacer(modifier = Modifier.height(8.dp))
-
-            StatusAndLogRow(
-                timer = timer,
-                isCleanModeActive = isCleanModeActive,
-                minimalUiAlpha = minimalUiAlpha,
-                enabled = minimalControlsInteractable,
-                onOpenLog = onOpenLog,
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            TimerNameChip(
-                timer = timer,
-                isCleanModeActive = isCleanModeActive,
-                minimalUiAlpha = minimalUiAlpha,
-                enabled = minimalControlsInteractable,
-                onNameChipClick = onNameChipClick,
-                onClearPreset = onClearPreset,
-            )
-        } // end top overlay Column
-
-        // Bottom overlay: title, presets (idle only), controls, quick adjust
-        Column(
+        }
+    } else {
+        BoxWithConstraints(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .fillMaxSize()
+                .windowInsetsPadding(
+                    WindowInsets.statusBars
+                        .union(WindowInsets.displayCutout)
+                        .union(WindowInsets.navigationBars),
+                )
+                .padding(horizontal = 20.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            TimerTitleDisplay(timer = timer, isCleanModeActive = isCleanModeActive, minimalUiAlpha = minimalUiAlpha)
+            val heroSize = minOf(maxWidth, maxHeight * 0.68f)
 
-            CleanModeCanvasAdjustBar(
-                visible = isCleanModeActive,
-                controlsAlpha = minimalUiAlpha,
-                enabled = minimalControlsInteractable,
-                positiveOnly = timer.status == TimerStatus.Overtime,
-                onAdjust = onCleanModeAdjust,
+            // Timer arc — anchored at center so top/bottom content never shifts its position
+            HeroTimerCard(
+                timer = timer,
+                displayAlpha = if (isCleanModeActive) minimalUiAlpha else 1f,
+                previewDurationMillis = effectivePreviewDurationMillis,
+                onPreviewDurationChanged = { previewDurationMillis = it },
+                onDragCommit = ::commitPreviewDuration,
+                onCenterTap = {
+                    when (timer.status) {
+                        TimerStatus.Idle    -> handleIdleCenterTap()
+                        TimerStatus.Running -> onAction(TimerAction.Pause())
+                        TimerStatus.Paused  -> onAction(TimerAction.Resume())
+                        else                -> {}
+                    }
+                },
+                onCenterLongPress = onOpenDurationPicker,
+                modifier = Modifier.size(heroSize),
+                isOledMode = appState.isOledMode,
+                onDragActiveChanged = { dragging ->
+                    isDragging = dragging
+                },
             )
-            if (isCleanModeActive) {
-                Spacer(modifier = Modifier.height(12.dp))
-            }
 
-            if (!isCleanModeActive) {
-                AnimatedVisibility(visible = timer.status == TimerStatus.Idle) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        SectionCard(title = stringResource(R.string.presets)) {
-                            PresetRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                onPresetSelected = { onAction(TimerAction.SetDuration(it)) },
-                                enabled = true,
-                            )
+            // Top overlay: clock, end-time, status row, name chip
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                val clockAlpha = if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f
+                if (showTopClock) {
+                    Box(modifier = Modifier.alpha(clockAlpha)) {
+                        Crossfade(targetState = isDragging, label = "portraitDragReadout") { dragging ->
+                            if (dragging) {
+                                Text(
+                                    text = effectiveDisplayMillis.formatClockTime(),
+                                    style = MaterialTheme.typography.headlineLarge.copy(
+                                        fontSize = settings.clockTextSizeSp.sp,
+                                        lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
+                                    ),
+                                    color = Color(0xFFF59E0B),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = when (settings.clockPosition) {
+                                        ClockPosition.Left -> TextAlign.Start
+                                        ClockPosition.Center -> TextAlign.Center
+                                        ClockPosition.Right -> TextAlign.End
+                                    },
+                                )
+                            } else {
+                                CurrentTimeText(
+                                    showSeconds = settings.showClockSecondsEnabled,
+                                    clockPosition = settings.clockPosition,
+                                    clockTextSizeSp = settings.clockTextSizeSp,
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                } else {
+                    AnimatedVisibility(visible = isDragging) {
+                        Text(
+                            text = effectiveDisplayMillis.formatClockTime(),
+                            style = MaterialTheme.typography.headlineLarge.copy(
+                                fontSize = settings.clockTextSizeSp.sp,
+                                lineHeight = (settings.clockTextSizeSp * 1.2f).sp,
+                            ),
+                            color = Color(0xFFF59E0B),
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = when (settings.clockPosition) {
+                                ClockPosition.Left -> TextAlign.Start
+                                ClockPosition.Center -> TextAlign.Center
+                                ClockPosition.Right -> TextAlign.End
+                            },
+                        )
                     }
                 }
-                AnimatedVisibility(visible = timer.status != TimerStatus.Idle) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        SectionCard(title = stringResource(R.string.adjust_timer)) {
-                            QuickAdjustRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                onAdjust = onAdjust,
-                                enabled = true,
-                                positiveOnly = timer.status == TimerStatus.Overtime,
-                            )
+
+                val showEndTime = timer.status != TimerStatus.Finished && effectiveDisplayMillis > 0L &&
+                    (settings.showEndTimeEnabled || timer.status == TimerStatus.Idle)
+                AnimatedVisibility(
+                    visible = showEndTime,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically(),
+                ) {
+                    EndTimeText(
+                        timer = timer,
+                        clockPosition = settings.clockPosition,
+                        textSizeSp = settings.endTimeSizeSp,
+                        showSeconds = settings.showEndTimeSecondsEnabled,
+                        durationOverrideMillis = if (isDragging && isPreviewEditable) effectiveDurationForCommit else null,
+                        modifier = Modifier.alpha(
+                            if (isCleanModeActive && settings.hideClockInCleanMode) minimalUiAlpha else 1f,
+                        ),
+                    )
+                }
+
+                val showAnyTopRow = showTopClock || showEndTime || isDragging
+                if (showAnyTopRow) Spacer(modifier = Modifier.height(4.dp))
+                else Spacer(modifier = Modifier.height(8.dp))
+
+                StatusAndLogRow(
+                    timer = timer,
+                    isCleanModeActive = isCleanModeActive,
+                    minimalUiAlpha = minimalUiAlpha,
+                    enabled = minimalControlsInteractable,
+                    onOpenLog = onOpenLog,
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                TimerNameChip(
+                    timer = timer,
+                    isCleanModeActive = isCleanModeActive,
+                    minimalUiAlpha = minimalUiAlpha,
+                    enabled = minimalControlsInteractable,
+                    onNameChipClick = onNameChipClick,
+                    onClearPreset = onClearPreset,
+                )
+            } // end top overlay Column
+
+            // Bottom overlay: title, presets (idle only), controls, quick adjust
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                TimerTitleDisplay(timer = timer, isCleanModeActive = isCleanModeActive, minimalUiAlpha = minimalUiAlpha)
+
+                CleanModeCanvasAdjustBar(
+                    visible = isCleanModeActive,
+                    controlsAlpha = minimalUiAlpha,
+                    enabled = minimalControlsInteractable,
+                    positiveOnly = timer.status == TimerStatus.Overtime,
+                    onAdjust = onCleanModeAdjust,
+                )
+                if (isCleanModeActive) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                if (!isCleanModeActive) {
+                    AnimatedVisibility(visible = timer.status == TimerStatus.Idle) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SectionCard(title = stringResource(R.string.presets)) {
+                                PresetRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onPresetSelected = { onAction(TimerAction.SetDuration(it)) },
+                                    enabled = true,
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    AnimatedVisibility(visible = timer.status != TimerStatus.Idle) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SectionCard(title = stringResource(R.string.adjust_timer)) {
+                                QuickAdjustRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onAdjust = onAdjust,
+                                    enabled = true,
+                                    positiveOnly = timer.status == TimerStatus.Overtime,
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
                     }
                 }
-            }
 
-            TimerControls(
-                timer = resolvedIdleTimer,
-                onAction = ::handleTimerControlAction,
+                TimerControls(
+                    timer = resolvedIdleTimer,
+                    onAction = ::handleTimerControlAction,
+                    enabled = minimalControlsInteractable,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
+                )
+            } // end bottom overlay Column
+
+            HiddenBottomControlsRestoreLayer(
+                visible = isCleanModeActive && !cleanModeUiAwake && tapToToggleMinimalMode,
+                onRestore = awakenMinimalUi,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+            )
+
+            // Gear icon — top-right corner, consistent in both running and non-running modes
+            Surface(
+                onClick = onOpenSettings,
                 enabled = minimalControlsInteractable,
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .align(Alignment.TopEnd)
+                    .size(36.dp)
                     .alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
-            )
-        } // end bottom overlay Column
-
-        HiddenBottomControlsRestoreLayer(
-            visible = isCleanModeActive && !cleanModeUiAwake && tapToToggleMinimalMode,
-            onRestore = awakenMinimalUi,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-        )
-
-        // Gear icon — top-right corner, consistent in both running and non-running modes
-        Surface(
-            onClick = onOpenSettings,
-            enabled = minimalControlsInteractable,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .size(36.dp)
-                .alpha(if (isCleanModeActive) minimalUiAlpha else 1f),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Text(text = "⚙", style = MaterialTheme.typography.bodyMedium)
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Text(text = "⚙", style = MaterialTheme.typography.bodyMedium)
+                }
             }
-        }
-    } // end outer Box
+        } // end outer Box
+    }
 }
 
 
@@ -1493,7 +1795,31 @@ private fun HeroTimerCard(
         effectiveDisplayMillis.formatClockTime()
     }
 
-    Box(contentAlignment = Alignment.Center, modifier = modifier) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier.pointerInput(timer.status) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val startPosition = down.position
+                var movedBeyondSlop = false
+
+                val longPressed = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Final)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        if ((change.position - startPosition).getDistance() > viewConfiguration.touchSlop) {
+                            movedBeyondSlop = true
+                            break
+                        }
+                    }
+                } == null
+
+                if (movedBeyondSlop) return@awaitEachGesture
+                if (longPressed) onCenterLongPress() else onCenterTap()
+            }
+        },
+    ) {
         VisualTimerCanvas(
             modifier = Modifier.fillMaxSize(),
             timer = timer,
@@ -1503,14 +1829,7 @@ private fun HeroTimerCard(
             onDragActiveChanged = onDragActiveChanged,
             displayMillisOverride = previewDurationMillis,
         )
-        Box(
-            modifier = Modifier
-                .wrapContentSize()
-                .combinedClickable(
-                    onClick = onCenterTap,
-                    onLongClick = onCenterLongPress,
-                ),
-        ) {
+        Box(modifier = Modifier.wrapContentSize()) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -1594,6 +1913,21 @@ private fun SettingsSheetContent(
         mutableStateOf(
             Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE ||
                 context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+        )
+    }
+    val finishedAlertRequirements = remember(
+        appState.finishedAlertMode,
+        appState.overlayShowOnLockscreen,
+        overlayPermissionGranted,
+        accessibilityServiceConnected,
+        notifGranted,
+        fullScreenGranted,
+    ) {
+        FinishedAlertRequirementResolver.resolve(
+            context = context,
+            appState = appState,
+            accessibilityServiceConnected = accessibilityServiceConnected,
+            overlayPermissionGranted = overlayPermissionGranted,
         )
     }
 
@@ -1730,68 +2064,37 @@ private fun SettingsSheetContent(
             color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(modifier = Modifier.height(12.dp))
-        val tabLabels = listOf(
-            R.string.settings_tab_appearance,
-            R.string.settings_tab_behavior,
-            R.string.settings_tab_notifications,
-            R.string.settings_tab_overlay,
-            R.string.settings_tab_extra,
-            R.string.settings_tab_permissions,
+        SettingsTargetSelector(
+            selectedTarget = selectedTab,
+            onTargetSelected = { selectedTab = it },
         )
-        ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 0.dp) {
-            tabLabels.forEachIndexed { index, labelRes ->
-                Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = { Text(stringResource(labelRes), maxLines = 1) },
-                )
-            }
-        }
 
         when (selectedTab) {
-            0 -> AppearanceSettingsTab(
-                appState = appState,
+            0 -> CurrentTimerSettingsTarget(
                 settings = settings,
                 onAction = onAction,
-                onPickFont = { fontPickerLauncher.launch(arrayOf("*/*")) },
             )
-            1 -> BehaviorSettingsTab(
+            1 -> DefaultTimerSettingsTarget(
                 appState = appState,
-                settings = settings,
                 onAction = onAction,
                 onSetDefaultDuration = onSetDefaultDuration,
-                onShowAutomationDialog = { showAutomationDialog = true },
             )
-            2 -> NotificationSettingsTab(
+            else -> AppSettingsTarget(
                 appState = appState,
-                settings = settings,
-                onAction = onAction,
-            )
-            3 -> OverlaySettingsTab(
-                appState = appState,
-                overlayPermissionGranted = overlayPermissionGranted,
-                accessibilityServiceConnected = accessibilityServiceConnected,
-                onAction = onAction,
-                onOpenOverlayPermissionSettings = onOpenOverlayPermissionSettings,
-                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
-            )
-            4 -> ExtraSettingsTab(
                 autoBackupEnabled = appState.autoBackupEnabled,
                 autoBackupLocationUri = autoBackupLocationUri,
                 backupStatusMessage = backupStatusMessage,
+                overlayPermissionGranted = overlayPermissionGranted,
+                accessibilityServiceConnected = accessibilityServiceConnected,
                 onAction = onAction,
+                finishedAlertRequirements = finishedAlertRequirements,
+                onPickFont = { fontPickerLauncher.launch(arrayOf("*/*")) },
+                onShowAutomationDialog = { showAutomationDialog = true },
                 onExport = { exportLauncher.launch("visualtimer_backup_$today.json") },
                 onImport = { importLauncher.launch(arrayOf("application/json")) },
                 onSetAutoBackupLocation = { autoBackupFolderLauncher.launch(null) },
-            )
-            else -> PermissionsTabContent(
-                notifGranted = notifGranted,
-                overlayGranted = overlayPermissionGranted,
-                exactAlarmGranted = exactAlarmGranted,
-                fullScreenGranted = fullScreenGranted,
-                accessibilityServiceConnected = accessibilityServiceConnected,
                 onRequestNotification = onRequestNotificationPermission,
-                onOpenOverlaySettings = onOpenOverlayPermissionSettings,
+                onOpenOverlayPermissionSettings = onOpenOverlayPermissionSettings,
                 onOpenExactAlarmSettings = {
                     context.startActivity(
                         Intent(
@@ -1811,6 +2114,9 @@ private fun SettingsSheetContent(
                     }
                 },
                 onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+                notifGranted = notifGranted,
+                exactAlarmGranted = exactAlarmGranted,
+                fullScreenGranted = fullScreenGranted,
             )
         }
 
@@ -1830,15 +2136,194 @@ private fun SettingsTabColumn(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun AppearanceSettingsTab(
-    appState: AppState,
+private fun SettingsTargetSelector(
+    selectedTarget: Int,
+    onTargetSelected: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SelectorChip(
+            label = stringResource(R.string.settings_target_current),
+            selected = selectedTarget == 0,
+            onClick = { onTargetSelected(0) },
+        )
+        SelectorChip(
+            label = stringResource(R.string.settings_target_defaults),
+            selected = selectedTarget == 1,
+            onClick = { onTargetSelected(1) },
+        )
+        SelectorChip(
+            label = stringResource(R.string.settings_target_app),
+            selected = selectedTarget == 2,
+            onClick = { onTargetSelected(2) },
+        )
+    }
+}
+
+@Composable
+private fun CurrentTimerSettingsTarget(
     settings: TimerSettings,
     onAction: (TimerAction) -> Unit,
-    onPickFont: () -> Unit,
+) {
+    SettingsTabColumn {
+        SectionCard(title = stringResource(R.string.settings_section_appearance)) {
+            TimerAppearanceControls(
+                settings = settings,
+                onShowCurrentTime = { onAction(TimerAction.SetShowCurrentTimeEnabled(it)) },
+                onShowClockSeconds = { onAction(TimerAction.SetShowClockSecondsEnabled(it)) },
+                onClockPosition = { onAction(TimerAction.SetClockPosition(it)) },
+                onClockSize = { onAction(TimerAction.SetClockTextSizeSp(it)) },
+                onShowEndTime = { onAction(TimerAction.SetShowEndTimeEnabled(it)) },
+                onShowEndTimeSeconds = { onAction(TimerAction.SetShowEndTimeSecondsEnabled(it)) },
+                onEndTimeSize = { onAction(TimerAction.SetEndTimeSizeSp(it)) },
+                onCenterTimeSize = { onAction(TimerAction.SetCenterTimeSizeSp(it)) },
+                onClockwiseMode = { onAction(TimerAction.SetClockwiseModeEnabled(it)) },
+                onShowDirectionIndicator = { onAction(TimerAction.SetShowDirectionIndicator(it)) },
+                onFullClockMode = { onAction(TimerAction.SetFullClockMode(it)) },
+                onCleanMode = { onAction(TimerAction.SetCleanModeEnabled(it)) },
+                onCleanAutoDismiss = { onAction(TimerAction.SetCleanModeAutoDismissEnabled(it)) },
+                onCleanAutoDismissSeconds = { onAction(TimerAction.SetCleanModeAutoDismissSeconds(it)) },
+                onHideClockInCleanMode = { onAction(TimerAction.SetHideClockInCleanMode(it)) },
+                onTimerTitle = { onAction(TimerAction.SetTimerTitleEnabled(it)) },
+                onTimerTitlePosition = { onAction(TimerAction.SetTimerTitlePosition(it)) },
+                onTimerTitleSize = { onAction(TimerAction.SetTimerTitleTextSizeSp(it)) },
+                onTimerTitleHideInCleanMode = { onAction(TimerAction.SetTimerTitleHideInCleanMode(it)) },
+            )
+        }
+
+        SectionCard(title = stringResource(R.string.settings_section_behavior)) {
+            PreferenceToggle(
+                label = stringResource(R.string.prompt_before_start),
+                checked = settings.promptBeforeStart,
+                onCheckedChange = { onAction(TimerAction.SetPromptBeforeStart(it)) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.keep_screen_awake),
+                checked = settings.keepScreenAwake,
+                onCheckedChange = { onAction(TimerAction.SetKeepScreenAwakeEnabled(it)) },
+            )
+        }
+
+        SectionCard(title = stringResource(R.string.settings_section_notifications)) {
+            TimerNotificationControls(
+                settings = settings,
+                onSoundEnabled = { onAction(TimerAction.SetSoundEnabled(it)) },
+                onRoute = { onAction(TimerAction.SetFinishedSoundRoute(it)) },
+                onVolume = { onAction(TimerAction.SetFinishedSoundVolumePercent(it)) },
+                onIgnoreSilent = { onAction(TimerAction.SetIgnoreSilentMode(it)) },
+                onOverrideMuted = { onAction(TimerAction.SetOverrideMutedSystemVolume(it)) },
+                onVibration = { onAction(TimerAction.SetFinishedVibrationMode(it)) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun DefaultTimerSettingsTarget(
+    appState: AppState,
+    onAction: (TimerAction) -> Unit,
+    onSetDefaultDuration: () -> Unit,
 ) {
     val defaultSettings = appState.defaultTimerSettings
     SettingsTabColumn {
-        SectionCard {
+        SectionCard(title = stringResource(R.string.default_duration)) {
+            DefaultDurationRow(
+                defaultDurationMillis = appState.defaultDurationMillis,
+                onSetDefaultDuration = onSetDefaultDuration,
+            )
+        }
+
+        SectionCard(title = stringResource(R.string.settings_section_appearance)) {
+            TimerAppearanceControls(
+                settings = defaultSettings,
+                onShowCurrentTime = {
+                    onAction(
+                        TimerAction.SetDefaultTimerSettings(
+                            defaultSettings.copy(
+                                showCurrentTimeEnabled = it,
+                                showClockSecondsEnabled = if (it) defaultSettings.showClockSecondsEnabled else false,
+                            )
+                        )
+                    )
+                },
+                onShowClockSeconds = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(showClockSecondsEnabled = it))) },
+                onClockPosition = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(clockPosition = it))) },
+                onClockSize = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(clockTextSizeSp = it))) },
+                onShowEndTime = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(showEndTimeEnabled = it))) },
+                onShowEndTimeSeconds = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(showEndTimeSecondsEnabled = it))) },
+                onEndTimeSize = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(endTimeSizeSp = it))) },
+                onCenterTimeSize = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(centerTimeSizeSp = it))) },
+                onClockwiseMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(clockwiseModeEnabled = it))) },
+                onShowDirectionIndicator = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(showDirectionIndicator = it))) },
+                onFullClockMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(fullClockMode = it))) },
+                onCleanMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(cleanModeEnabled = it))) },
+                onCleanAutoDismiss = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(cleanModeAutoDismissEnabled = it))) },
+                onCleanAutoDismissSeconds = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(cleanModeAutoDismissSeconds = it))) },
+                onHideClockInCleanMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(hideClockInCleanMode = it))) },
+                onTimerTitle = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(timerTitleEnabled = it))) },
+                onTimerTitlePosition = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(timerTitlePosition = it))) },
+                onTimerTitleSize = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(timerTitleTextSizeSp = it))) },
+                onTimerTitleHideInCleanMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(timerTitleHideInCleanMode = it))) },
+            )
+        }
+
+        SectionCard(title = stringResource(R.string.settings_section_behavior)) {
+            PreferenceToggle(
+                label = stringResource(R.string.prompt_before_start),
+                checked = defaultSettings.promptBeforeStart,
+                onCheckedChange = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(promptBeforeStart = it))) },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.keep_screen_awake),
+                checked = defaultSettings.keepScreenAwake,
+                onCheckedChange = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(keepScreenAwake = it))) },
+            )
+        }
+
+        SectionCard(title = stringResource(R.string.settings_section_notifications)) {
+            TimerNotificationControls(
+                settings = defaultSettings,
+                onSoundEnabled = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(soundEnabled = it))) },
+                onRoute = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(finishedSoundRoute = it))) },
+                onVolume = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(finishedSoundVolumePercent = it))) },
+                onIgnoreSilent = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(ignoreSilentMode = it))) },
+                onOverrideMuted = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(overrideMutedSystemVolume = it))) },
+                onVibration = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(finishedVibrationMode = it))) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppSettingsTarget(
+    appState: AppState,
+    autoBackupEnabled: Boolean,
+    autoBackupLocationUri: String?,
+    backupStatusMessage: String?,
+    overlayPermissionGranted: Boolean,
+    accessibilityServiceConnected: Boolean,
+    notifGranted: Boolean,
+    exactAlarmGranted: Boolean,
+    fullScreenGranted: Boolean,
+    finishedAlertRequirements: FinishedAlertRequirements,
+    onAction: (TimerAction) -> Unit,
+    onPickFont: () -> Unit,
+    onShowAutomationDialog: () -> Unit,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
+    onSetAutoBackupLocation: () -> Unit,
+    onRequestNotification: () -> Unit,
+    onOpenOverlayPermissionSettings: () -> Unit,
+    onOpenExactAlarmSettings: () -> Unit,
+    onOpenFullScreenSettings: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
+) {
+    SettingsTabColumn {
+        SectionCard(title = stringResource(R.string.settings_section_app_appearance)) {
             ThemeModeSelector(
                 selectedMode = appState.themeMode,
                 onModeSelected = { onAction(TimerAction.SetThemeMode(it)) },
@@ -1869,106 +2354,7 @@ private fun AppearanceSettingsTab(
             }
         }
 
-        SectionCard(title = stringResource(R.string.current_timer_settings)) {
-            TimerAppearanceControls(
-                settings = settings,
-                onShowCurrentTime = { onAction(TimerAction.SetShowCurrentTimeEnabled(it)) },
-                onShowClockSeconds = { onAction(TimerAction.SetShowClockSecondsEnabled(it)) },
-                onClockPosition = { onAction(TimerAction.SetClockPosition(it)) },
-                onClockSize = { onAction(TimerAction.SetClockTextSizeSp(it)) },
-                onShowEndTime = { onAction(TimerAction.SetShowEndTimeEnabled(it)) },
-                onShowEndTimeSeconds = { onAction(TimerAction.SetShowEndTimeSecondsEnabled(it)) },
-                onEndTimeSize = { onAction(TimerAction.SetEndTimeSizeSp(it)) },
-                onCenterTimeSize = { onAction(TimerAction.SetCenterTimeSizeSp(it)) },
-                onClockwiseMode = { onAction(TimerAction.SetClockwiseModeEnabled(it)) },
-                onShowDirectionIndicator = { onAction(TimerAction.SetShowDirectionIndicator(it)) },
-                onFullClockMode = { onAction(TimerAction.SetFullClockMode(it)) },
-                onCleanMode = { onAction(TimerAction.SetCleanModeEnabled(it)) },
-                onCleanAutoDismiss = { onAction(TimerAction.SetCleanModeAutoDismissEnabled(it)) },
-                onCleanAutoDismissSeconds = { onAction(TimerAction.SetCleanModeAutoDismissSeconds(it)) },
-                onHideClockInCleanMode = { onAction(TimerAction.SetHideClockInCleanMode(it)) },
-                onTimerTitle = { onAction(TimerAction.SetTimerTitleEnabled(it)) },
-                onTimerTitlePosition = { onAction(TimerAction.SetTimerTitlePosition(it)) },
-                onTimerTitleSize = { onAction(TimerAction.SetTimerTitleTextSizeSp(it)) },
-                onTimerTitleHideInCleanMode = { onAction(TimerAction.SetTimerTitleHideInCleanMode(it)) },
-            )
-        }
-
-        SectionCard(title = stringResource(R.string.default_timer_settings_title)) {
-            TimerAppearanceControls(
-                settings = defaultSettings,
-                onShowCurrentTime = {
-                    onAction(TimerAction.SetDefaultTimerSettings(
-                        defaultSettings.copy(showCurrentTimeEnabled = it, showClockSecondsEnabled = if (it) defaultSettings.showClockSecondsEnabled else false)
-                    ))
-                },
-                onShowClockSeconds = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(showClockSecondsEnabled = it))) },
-                onClockPosition = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(clockPosition = it))) },
-                onClockSize = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(clockTextSizeSp = it))) },
-                onShowEndTime = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(showEndTimeEnabled = it))) },
-                onShowEndTimeSeconds = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(showEndTimeSecondsEnabled = it))) },
-                onEndTimeSize = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(endTimeSizeSp = it))) },
-                onCenterTimeSize = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(centerTimeSizeSp = it))) },
-                onClockwiseMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(clockwiseModeEnabled = it))) },
-                onShowDirectionIndicator = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(showDirectionIndicator = it))) },
-                onFullClockMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(fullClockMode = it))) },
-                onCleanMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(cleanModeEnabled = it))) },
-                onCleanAutoDismiss = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(cleanModeAutoDismissEnabled = it))) },
-                onCleanAutoDismissSeconds = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(cleanModeAutoDismissSeconds = it))) },
-                onHideClockInCleanMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(hideClockInCleanMode = it))) },
-                onTimerTitle = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(timerTitleEnabled = it))) },
-                onTimerTitlePosition = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(timerTitlePosition = it))) },
-                onTimerTitleSize = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(timerTitleTextSizeSp = it))) },
-                onTimerTitleHideInCleanMode = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(timerTitleHideInCleanMode = it))) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun BehaviorSettingsTab(
-    appState: AppState,
-    settings: TimerSettings,
-    onAction: (TimerAction) -> Unit,
-    onSetDefaultDuration: () -> Unit,
-    onShowAutomationDialog: () -> Unit,
-) {
-    val defaultSettings = appState.defaultTimerSettings
-    SettingsTabColumn {
-        SectionCard(title = stringResource(R.string.default_timer_settings_title)) {
-            DefaultDurationRow(
-                defaultDurationMillis = appState.defaultDurationMillis,
-                onSetDefaultDuration = onSetDefaultDuration,
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.prompt_before_start),
-                checked = defaultSettings.promptBeforeStart,
-                onCheckedChange = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(promptBeforeStart = it))) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.keep_screen_awake),
-                checked = defaultSettings.keepScreenAwake,
-                onCheckedChange = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(keepScreenAwake = it))) },
-            )
-        }
-
-        SectionCard(title = stringResource(R.string.current_timer_settings)) {
-            PreferenceToggle(
-                label = stringResource(R.string.prompt_before_start),
-                checked = settings.promptBeforeStart,
-                onCheckedChange = { onAction(TimerAction.SetPromptBeforeStart(it)) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.keep_screen_awake),
-                checked = settings.keepScreenAwake,
-                onCheckedChange = { onAction(TimerAction.SetKeepScreenAwakeEnabled(it)) },
-            )
-        }
-
-        SectionCard {
+        SectionCard(title = stringResource(R.string.settings_section_interaction)) {
             PreferenceToggle(
                 label = stringResource(R.string.confirm_swipe_delete),
                 checked = appState.confirmSwipeDelete,
@@ -1982,7 +2368,7 @@ private fun BehaviorSettingsTab(
             )
         }
 
-        SectionCard {
+        SectionCard(title = stringResource(R.string.automation_title)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -2014,57 +2400,112 @@ private fun BehaviorSettingsTab(
                 onPlacementSelected = { onAction(TimerAction.SetQuickTimerLandscapePlacement(it)) },
             )
         }
+
+        AppFinishedAlertSection(
+            appState = appState,
+            finishedAlertRequirements = finishedAlertRequirements,
+            onAction = onAction,
+            onOpenPermissionSettings = { permission ->
+                when (permission) {
+                    FinishedAlertPermission.Notifications -> onRequestNotification()
+                    FinishedAlertPermission.Overlay -> onOpenOverlayPermissionSettings()
+                    FinishedAlertPermission.FullScreenIntent -> onOpenFullScreenSettings()
+                    FinishedAlertPermission.Accessibility -> onOpenAccessibilitySettings()
+                }
+            },
+        )
+
+        AppOverlaySection(
+            appState = appState,
+            overlayPermissionGranted = overlayPermissionGranted,
+            accessibilityServiceConnected = accessibilityServiceConnected,
+            onAction = onAction,
+            onOpenOverlayPermissionSettings = onOpenOverlayPermissionSettings,
+            onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+        )
+
+        AppBackupSection(
+            autoBackupEnabled = autoBackupEnabled,
+            autoBackupLocationUri = autoBackupLocationUri,
+            backupStatusMessage = backupStatusMessage,
+            onAction = onAction,
+            onExport = onExport,
+            onImport = onImport,
+            onSetAutoBackupLocation = onSetAutoBackupLocation,
+        )
+
+        AppPermissionsSection(
+            notifGranted = notifGranted,
+            overlayGranted = overlayPermissionGranted,
+            exactAlarmGranted = exactAlarmGranted,
+            fullScreenGranted = fullScreenGranted,
+            accessibilityServiceConnected = accessibilityServiceConnected,
+            onRequestNotification = onRequestNotification,
+            onOpenOverlaySettings = onOpenOverlayPermissionSettings,
+            onOpenExactAlarmSettings = onOpenExactAlarmSettings,
+            onOpenFullScreenSettings = onOpenFullScreenSettings,
+            onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+        )
     }
 }
 
 @Composable
-private fun NotificationSettingsTab(
+private fun ColumnScope.AppFinishedAlertSection(
     appState: AppState,
-    settings: TimerSettings,
+    finishedAlertRequirements: FinishedAlertRequirements,
     onAction: (TimerAction) -> Unit,
+    onOpenPermissionSettings: (FinishedAlertPermission) -> Unit,
 ) {
-    val defaultSettings = appState.defaultTimerSettings
-    SettingsTabColumn {
-        SectionCard(title = stringResource(R.string.current_timer_settings)) {
-            TimerNotificationControls(
-                settings = settings,
-                onSoundEnabled = { onAction(TimerAction.SetSoundEnabled(it)) },
-                onRoute = { onAction(TimerAction.SetFinishedSoundRoute(it)) },
-                onVolume = { onAction(TimerAction.SetFinishedSoundVolumePercent(it)) },
-                onIgnoreSilent = { onAction(TimerAction.SetIgnoreSilentMode(it)) },
-                onOverrideMuted = { onAction(TimerAction.SetOverrideMutedSystemVolume(it)) },
-                onVibration = { onAction(TimerAction.SetFinishedVibrationMode(it)) },
-            )
-        }
-
-        SectionCard(title = stringResource(R.string.default_timer_settings_title)) {
-            TimerNotificationControls(
-                settings = defaultSettings,
-                onSoundEnabled = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(soundEnabled = it))) },
-                onRoute = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(finishedSoundRoute = it))) },
-                onVolume = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(finishedSoundVolumePercent = it))) },
-                onIgnoreSilent = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(ignoreSilentMode = it))) },
-                onOverrideMuted = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(overrideMutedSystemVolume = it))) },
-                onVibration = { onAction(TimerAction.SetDefaultTimerSettings(defaultSettings.copy(finishedVibrationMode = it))) },
-            )
-        }
-
-        SectionCard {
-            NotificationModeSelector(
-                selectedMode = appState.notificationMode,
-                onModeSelected = { onAction(TimerAction.SetNotificationMode(it)) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            NotificationUpdateIntervalSelector(
-                intervalSeconds = appState.notificationUpdateIntervalSeconds,
-                onIntervalSelected = { onAction(TimerAction.SetNotificationUpdateInterval(it)) },
+    val context = LocalContext.current
+    val missingPermissionLabels = finishedAlertRequirements.missingPermissions.joinToString(", ") {
+        finishedAlertPermissionLabel(context, it)
+    }
+    SectionCard(title = stringResource(R.string.finished_alert_section_title)) {
+        FinishedAlertModeSelector(
+            selectedMode = appState.finishedAlertMode,
+            onModeSelected = { onAction(TimerAction.SetFinishedAlertMode(it)) },
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        PreferenceToggle(
+            label = stringResource(R.string.finished_alert_banner_toggle),
+            checked = appState.showMissingFinishedAlertPermissionsBanner,
+            onCheckedChange = {
+                onAction(TimerAction.SetShowMissingFinishedAlertPermissionsBanner(it))
+            },
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = stringResource(
+                if (finishedAlertRequirements.isSatisfied) {
+                    R.string.finished_alert_permissions_ready
+                } else {
+                    R.string.finished_alert_permissions_missing_prefix
+                },
+            ) + if (finishedAlertRequirements.isSatisfied) {
+                ""
+            } else {
+                " $missingPermissionLabels"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (finishedAlertRequirements.isSatisfied) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.error
+            },
+        )
+        if (finishedAlertRequirements.missingPermissions.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            AssistChip(
+                onClick = { onOpenPermissionSettings(finishedAlertRequirements.missingPermissions.first()) },
+                label = { Text(stringResource(R.string.finished_alert_go_to_settings)) },
+                shape = RoundedCornerShape(18.dp),
             )
         }
     }
 }
 
 @Composable
-private fun OverlaySettingsTab(
+private fun ColumnScope.AppOverlaySection(
     appState: AppState,
     overlayPermissionGranted: Boolean,
     accessibilityServiceConnected: Boolean,
@@ -2072,83 +2513,159 @@ private fun OverlaySettingsTab(
     onOpenOverlayPermissionSettings: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
 ) {
-    SettingsTabColumn {
-        SectionCard {
+    SectionCard(title = stringResource(R.string.settings_section_overlay)) {
+        PreferenceToggle(
+            label = stringResource(R.string.overlay_enabled),
+            checked = appState.overlayEnabled,
+            onCheckedChange = { onAction(TimerAction.SetOverlayEnabled(it)) },
+        )
+        if (appState.overlayEnabled) {
+            Spacer(modifier = Modifier.height(4.dp))
             PreferenceToggle(
-                label = stringResource(R.string.overlay_enabled),
-                checked = appState.overlayEnabled,
-                onCheckedChange = { onAction(TimerAction.SetOverlayEnabled(it)) },
+                label = stringResource(R.string.overlay_show_on_lockscreen),
+                description = stringResource(R.string.overlay_show_on_lockscreen_desc),
+                checked = appState.overlayShowOnLockscreen,
+                onCheckedChange = { onAction(TimerAction.SetOverlayShowOnLockscreen(it)) },
             )
-            if (appState.overlayEnabled) {
-                Spacer(modifier = Modifier.height(4.dp))
-                PreferenceToggle(
-                    label = stringResource(R.string.overlay_show_on_lockscreen),
-                    description = stringResource(R.string.overlay_show_on_lockscreen_desc),
-                    checked = appState.overlayShowOnLockscreen,
-                    onCheckedChange = { onAction(TimerAction.SetOverlayShowOnLockscreen(it)) },
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                PreferenceToggle(
-                    label = stringResource(R.string.overlay_show_timer_name),
-                    checked = appState.overlayShowTimerName,
-                    onCheckedChange = { onAction(TimerAction.SetOverlayShowTimerName(it)) },
-                )
-                if (appState.overlayShowTimerName) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OverlayLabelPositionSelector(
-                        selectedPosition = appState.overlayTimerNamePosition,
-                        onPositionSelected = { onAction(TimerAction.SetOverlayTimerNamePosition(it)) },
-                    )
-                }
-                if (appState.overlayShowOnLockscreen && !accessibilityServiceConnected) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.overlay_accessibility_required),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    AssistChip(
-                        onClick = onOpenAccessibilitySettings,
-                        label = { Text(stringResource(R.string.overlay_open_accessibility_settings)) },
-                        shape = RoundedCornerShape(18.dp),
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            OverlaySizeSelector(
-                selectedSize = appState.overlaySize,
-                onSizeSelected = { onAction(TimerAction.SetOverlaySize(it)) },
+            Spacer(modifier = Modifier.height(4.dp))
+            PreferenceToggle(
+                label = stringResource(R.string.overlay_show_timer_name),
+                checked = appState.overlayShowTimerName,
+                onCheckedChange = { onAction(TimerAction.SetOverlayShowTimerName(it)) },
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            OverlayStyleSelector(
-                selectedStyle = appState.overlayStyle,
-                onStyleSelected = { onAction(TimerAction.SetOverlayStyle(it)) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = if (overlayPermissionGranted) {
-                    stringResource(R.string.overlay_permission_granted)
-                } else {
-                    stringResource(R.string.overlay_permission_required)
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (!overlayPermissionGranted) {
+            if (appState.overlayShowTimerName) {
                 Spacer(modifier = Modifier.height(12.dp))
+                OverlayLabelPositionSelector(
+                    selectedPosition = appState.overlayTimerNamePosition,
+                    onPositionSelected = { onAction(TimerAction.SetOverlayTimerNamePosition(it)) },
+                )
+            }
+            if (appState.overlayShowOnLockscreen && !accessibilityServiceConnected) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.overlay_accessibility_required),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
                 AssistChip(
-                    onClick = onOpenOverlayPermissionSettings,
-                    label = { Text(stringResource(R.string.overlay_open_settings)) },
+                    onClick = onOpenAccessibilitySettings,
+                    label = { Text(stringResource(R.string.overlay_open_accessibility_settings)) },
                     shape = RoundedCornerShape(18.dp),
                 )
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        OverlaySizeSelector(
+            selectedSize = appState.overlaySize,
+            onSizeSelected = { onAction(TimerAction.SetOverlaySize(it)) },
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OverlayStyleSelector(
+            selectedStyle = appState.overlayStyle,
+            onStyleSelected = { onAction(TimerAction.SetOverlayStyle(it)) },
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = if (overlayPermissionGranted) {
+                stringResource(R.string.overlay_permission_granted)
+            } else {
+                stringResource(R.string.overlay_permission_required)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!overlayPermissionGranted) {
+            Spacer(modifier = Modifier.height(12.dp))
+            AssistChip(
+                onClick = onOpenOverlayPermissionSettings,
+                label = { Text(stringResource(R.string.overlay_open_settings)) },
+                shape = RoundedCornerShape(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun FinishedAlertModeSelector(
+    selectedMode: FinishedAlertMode,
+    onModeSelected: (FinishedAlertMode) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.finished_alert_mode_title),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SelectorChip(
+                label = stringResource(R.string.finished_alert_mode_page),
+                selected = selectedMode == FinishedAlertMode.TimerIsUpPage,
+                onClick = { onModeSelected(FinishedAlertMode.TimerIsUpPage) },
+            )
+            SelectorChip(
+                label = stringResource(R.string.finished_alert_mode_notification_overlay),
+                selected = selectedMode == FinishedAlertMode.NotificationAndOverlay,
+                onClick = { onModeSelected(FinishedAlertMode.NotificationAndOverlay) },
+            )
+        }
+    }
+}
+
+private fun finishedAlertPermissionLabel(context: Context, permission: FinishedAlertPermission): String = when (permission) {
+    FinishedAlertPermission.Notifications -> context.getString(R.string.perm_notifications_title)
+    FinishedAlertPermission.Overlay -> context.getString(R.string.perm_overlay_title)
+    FinishedAlertPermission.FullScreenIntent -> context.getString(R.string.perm_full_screen_title)
+    FinishedAlertPermission.Accessibility -> context.getString(R.string.perm_accessibility_title)
+}
+
+@Composable
+private fun FinishedAlertPermissionBanner(
+    missingPermissions: List<FinishedAlertPermission>,
+    onOpenSettings: () -> Unit,
+    onNeverShowAgain: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val missingPermissionLabels = missingPermissions.joinToString(", ") {
+        finishedAlertPermissionLabel(context, it)
+    }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        tonalElevation = 3.dp,
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Text(
+                text = stringResource(R.string.finished_alert_banner_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(
+                    R.string.finished_alert_banner_body,
+                    missingPermissionLabels,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onOpenSettings) {
+                    Text(stringResource(R.string.finished_alert_go_to_settings))
+                }
+                TextButton(onClick = onNeverShowAgain) {
+                    Text(stringResource(R.string.finished_alert_never_show_again))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ExtraSettingsTab(
+private fun ColumnScope.AppBackupSection(
     autoBackupEnabled: Boolean,
     autoBackupLocationUri: String?,
     backupStatusMessage: String?,
@@ -2157,60 +2674,162 @@ private fun ExtraSettingsTab(
     onImport: () -> Unit,
     onSetAutoBackupLocation: () -> Unit,
 ) {
-    SettingsTabColumn {
-        SectionCard(title = stringResource(R.string.backup_restore_title)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.backup_export))
-                }
-                OutlinedButton(onClick = onImport, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.backup_import))
-                }
+    SectionCard(title = stringResource(R.string.backup_restore_title)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.backup_export))
             }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            PreferenceToggle(
-                label = stringResource(R.string.auto_backup_title),
-                description = stringResource(R.string.auto_backup_description),
-                checked = autoBackupEnabled,
-                onCheckedChange = {
-                    if (autoBackupLocationUri == null && it) {
-                        onSetAutoBackupLocation()
-                    } else {
-                        onAction(TimerAction.SetAutoBackupEnabled(it))
-                    }
-                },
+            OutlinedButton(onClick = onImport, modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.backup_import))
+            }
+        }
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        PreferenceToggle(
+            label = stringResource(R.string.auto_backup_title),
+            description = stringResource(R.string.auto_backup_description),
+            checked = autoBackupEnabled,
+            onCheckedChange = {
+                if (autoBackupLocationUri == null && it) {
+                    onSetAutoBackupLocation()
+                } else {
+                    onAction(TimerAction.SetAutoBackupEnabled(it))
+                }
+            },
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(onClick = onSetAutoBackupLocation, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                if (autoBackupLocationUri == null)
+                    stringResource(R.string.auto_backup_set_location)
+                else
+                    stringResource(R.string.auto_backup_change_location)
             )
+        }
+        autoBackupLocationUri?.let { uriString ->
+            Spacer(modifier = Modifier.height(4.dp))
+            val displayPath = Uri.parse(uriString).lastPathSegment ?: uriString
+            Text(
+                text = stringResource(R.string.auto_backup_location_prefix) + displayPath,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        backupStatusMessage?.let { msg ->
             Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(onClick = onSetAutoBackupLocation, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    if (autoBackupLocationUri == null)
-                        stringResource(R.string.auto_backup_set_location)
-                    else
-                        stringResource(R.string.auto_backup_change_location)
-                )
-            }
-            autoBackupLocationUri?.let { uriString ->
-                Spacer(modifier = Modifier.height(4.dp))
-                val displayPath = Uri.parse(uriString).lastPathSegment ?: uriString
-                Text(
-                    text = stringResource(R.string.auto_backup_location_prefix) + displayPath,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            backupStatusMessage?.let { msg ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = msg,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                text = msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.AppPermissionsSection(
+    notifGranted: Boolean,
+    overlayGranted: Boolean,
+    exactAlarmGranted: Boolean,
+    fullScreenGranted: Boolean,
+    accessibilityServiceConnected: Boolean,
+    onRequestNotification: () -> Unit,
+    onOpenOverlaySettings: () -> Unit,
+    onOpenExactAlarmSettings: () -> Unit,
+    onOpenFullScreenSettings: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
+) {
+    SectionCard(title = stringResource(R.string.settings_target_permissions)) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            PermissionRowContent(
+                title = stringResource(R.string.perm_notifications_title),
+                description = stringResource(R.string.perm_notifications_desc),
+                granted = notifGranted,
+                grantLabel = stringResource(R.string.perm_action_grant),
+                onGrant = onRequestNotification,
+            )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        }
+        PermissionRowContent(
+            title = stringResource(R.string.perm_overlay_title),
+            description = stringResource(R.string.perm_overlay_desc),
+            granted = overlayGranted,
+            grantLabel = stringResource(R.string.perm_action_open_settings),
+            onGrant = onOpenOverlaySettings,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            PermissionRowContent(
+                title = stringResource(R.string.perm_exact_alarm_title),
+                description = stringResource(R.string.perm_exact_alarm_desc),
+                granted = exactAlarmGranted,
+                grantLabel = stringResource(R.string.perm_action_open_settings),
+                onGrant = onOpenExactAlarmSettings,
+            )
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            PermissionRowContent(
+                title = stringResource(R.string.perm_full_screen_title),
+                description = stringResource(R.string.perm_full_screen_desc),
+                granted = fullScreenGranted,
+                grantLabel = stringResource(R.string.perm_action_open_settings),
+                onGrant = onOpenFullScreenSettings,
+            )
+        }
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        PermissionRowContent(
+            title = stringResource(R.string.perm_accessibility_title),
+            description = stringResource(R.string.perm_accessibility_desc),
+            granted = accessibilityServiceConnected,
+            grantLabel = stringResource(R.string.perm_action_open_settings),
+            onGrant = onOpenAccessibilitySettings,
+        )
+    }
+}
+
+@Composable
+private fun PermissionRowContent(
+    title: String,
+    description: String,
+    granted: Boolean,
+    grantLabel: String,
+    onGrant: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        if (granted) {
+            Text(
+                text = stringResource(R.string.perm_granted),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        } else {
+            AssistChip(
+                onClick = onGrant,
+                label = { Text(grantLabel, style = MaterialTheme.typography.labelMedium) },
+                shape = RoundedCornerShape(18.dp),
+            )
         }
     }
 }

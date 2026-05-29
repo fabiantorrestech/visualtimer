@@ -26,6 +26,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.fabiantorrestech.visualtimerplus.MainActivity
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
 import com.fabiantorrestech.visualtimerplus.timer.AppState
+import com.fabiantorrestech.visualtimerplus.timer.FinishedAlertRequirementResolver
 import com.fabiantorrestech.visualtimerplus.timer.ONE_HOUR_MILLIS
 import com.fabiantorrestech.visualtimerplus.timer.OverlayLabelPosition
 import com.fabiantorrestech.visualtimerplus.timer.OverlaySize
@@ -139,10 +140,18 @@ object TimerOverlayManager {
         if (!initialized) return
         val timerIndex = latestState.overlayTimerIndex
         val timer = timerIndex?.let { latestState.timers[it] }
+        val suppressFinishedOverlay = timer?.status == TimerStatus.Overtime &&
+            FinishedAlertRequirementResolver.resolve(
+                context = appContext,
+                appState = latestState,
+                accessibilityServiceConnected = isAccessibilityServiceConnected(),
+                overlayPermissionGranted = canDrawOverlays(appContext),
+            ).shouldUseFinishedPage
         val shouldShow = !isAppForeground &&
             latestState.overlayEnabled &&
             canDrawOverlays(appContext) &&
             timer != null &&
+            !suppressFinishedOverlay &&
             timer.status in setOf(TimerStatus.Running, TimerStatus.Overtime, TimerStatus.Paused)
 
         if (!shouldShow) {

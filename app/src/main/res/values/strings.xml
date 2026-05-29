@@ -255,6 +255,27 @@
     <string name="settings_tab_overlay">Overlay</string>
     <string name="settings_tab_extra">Extra</string>
     <string name="settings_tab_permissions">Permissions</string>
+    <string name="settings_target_current">Current</string>
+    <string name="settings_target_defaults">Defaults</string>
+    <string name="settings_target_app">App</string>
+    <string name="settings_target_permissions">Permissions</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_behavior">Behavior</string>
+    <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_section_app_appearance">App Appearance</string>
+    <string name="settings_section_interaction">Interaction</string>
+    <string name="settings_section_overlay">Overlay</string>
+    <string name="finished_alert_section_title">Finished Alert</string>
+    <string name="finished_alert_mode_title">When a timer finishes</string>
+    <string name="finished_alert_mode_page">Timer Is Up Page</string>
+    <string name="finished_alert_mode_notification_overlay">Notification + Overlay</string>
+    <string name="finished_alert_banner_toggle">Show missing finished-alert permissions banner</string>
+    <string name="finished_alert_permissions_ready">All required finished-alert permissions are ready.</string>
+    <string name="finished_alert_permissions_missing_prefix">Missing required permissions:</string>
+    <string name="finished_alert_banner_title">Finished alert needs attention</string>
+    <string name="finished_alert_banner_body">The selected finished alert mode is missing: %1$s.</string>
+    <string name="finished_alert_go_to_settings">Go to settings</string>
+    <string name="finished_alert_never_show_again">Never show again</string>
 
     <!-- Permissions tab -->
     <string name="perm_notifications_title">Notifications</string>

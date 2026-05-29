@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 
 enum class NotificationMode { Consolidated, Individual }
 enum class QuickTimerLandscapePlacement { Center, LeftPanel, RightPanel }
+enum class FinishedAlertMode { TimerIsUpPage, NotificationAndOverlay }
 
 @Immutable
 data class AppState(
@@ -26,6 +27,8 @@ data class AppState(
     val overlayShowTimerName: Boolean = false,
     val overlayTimerNamePosition: OverlayLabelPosition = OverlayLabelPosition.Top,
     val overlayShowOnLockscreen: Boolean = false,
+    val finishedAlertMode: FinishedAlertMode = FinishedAlertMode.NotificationAndOverlay,
+    val showMissingFinishedAlertPermissionsBanner: Boolean = true,
     val autoBackupEnabled: Boolean = false,
     val autoOpenAppAfterQuickStart: Boolean = true,
     val quickTimerLandscapePlacement: QuickTimerLandscapePlacement = QuickTimerLandscapePlacement.Center,

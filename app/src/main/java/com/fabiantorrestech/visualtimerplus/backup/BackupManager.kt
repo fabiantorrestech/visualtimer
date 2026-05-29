@@ -34,6 +34,11 @@ object BackupManager {
         root.put("notification", JSONObject().apply {
             put("notification_mode", prefs.getString("notification_mode", "Consolidated") ?: "Consolidated")
             put("notification_update_interval", prefs.getInt("notification_update_interval", 15))
+            put("finished_alert_mode", prefs.getString("finished_alert_mode", "NotificationAndOverlay") ?: "NotificationAndOverlay")
+            put(
+                "show_missing_finished_alert_permissions_banner",
+                prefs.getBoolean("show_missing_finished_alert_permissions_banner", true),
+            )
         })
 
         root.put("overlay", JSONObject().apply {
@@ -134,6 +139,11 @@ object BackupManager {
         root.optJSONObject("notification")?.let { n ->
             editor.putString("notification_mode", n.optString("notification_mode", "Consolidated"))
             editor.putInt("notification_update_interval", n.optInt("notification_update_interval", 15))
+            editor.putString("finished_alert_mode", n.optString("finished_alert_mode", "NotificationAndOverlay"))
+            editor.putBoolean(
+                "show_missing_finished_alert_permissions_banner",
+                n.optBoolean("show_missing_finished_alert_permissions_banner", true),
+            )
         }
 
         root.optJSONObject("overlay")?.let { o ->

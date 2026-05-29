@@ -232,6 +232,18 @@ class TimerController(context: Context) {
                 AutoBackupManager.scheduleBackup(appContext)
             }
 
+            is TimerAction.SetFinishedAlertMode -> {
+                TimerRepository.update { state -> state.copy(finishedAlertMode = action.mode) }
+                AutoBackupManager.scheduleBackup(appContext)
+            }
+
+            is TimerAction.SetShowMissingFinishedAlertPermissionsBanner -> {
+                TimerRepository.update {
+                    state -> state.copy(showMissingFinishedAlertPermissionsBanner = action.enabled)
+                }
+                AutoBackupManager.scheduleBackup(appContext)
+            }
+
             is TimerAction.SetAutoBackupEnabled -> {
                 TimerRepository.update { state -> state.copy(autoBackupEnabled = action.enabled) }
             }
@@ -649,6 +661,18 @@ class TimerController(context: Context) {
                 dispatch(TimerAction.DismissFinished(timerIndex = idx))
             }
         }
+    }
+
+    fun addTimeDuringOvertime(timerIndex: Int, deltaMillis: Long) {
+        if (deltaMillis <= 0L) return
+        val timer = TimerRepository.getTimer(timerIndex)
+        if (timer.status != TimerStatus.Overtime) return
+        startService(
+            TimerService.ACTION_ADJUST_OVERTIME,
+            foreground = true,
+            timerIndex = timerIndex,
+            adjustDeltaMillis = deltaMillis,
+        )
     }
 
     private fun createLogEntry(timerIndex: Int) {

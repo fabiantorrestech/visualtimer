@@ -11,6 +11,7 @@ import com.fabiantorrestech.visualtimerplus.MainActivity
 import com.fabiantorrestech.visualtimerplus.ui.screen.TimerFinishedActivity
 import com.fabiantorrestech.visualtimerplus.R
 import com.fabiantorrestech.visualtimerplus.timer.AppState
+import com.fabiantorrestech.visualtimerplus.timer.FinishedAlertRequirementResolver
 import com.fabiantorrestech.visualtimerplus.timer.NotificationMode
 import com.fabiantorrestech.visualtimerplus.timer.TimerInstance
 import com.fabiantorrestech.visualtimerplus.timer.TimerService
@@ -29,14 +30,20 @@ class TimerNotificationManager(
     }
 
     fun buildServiceNotification(state: AppState): Notification {
-        val activeTimer = state.activeTimer
-        val channelId = if (activeTimer.status == TimerStatus.Finished || activeTimer.status == TimerStatus.Overtime) {
+        val displayTimer = notificationDisplayTimer(state)
+        val shouldLaunchFinishedPage = FinishedAlertRequirementResolver.resolve(context, state).shouldUseFinishedPage
+        val channelId = if (displayTimer.status == TimerStatus.Finished || displayTimer.status == TimerStatus.Overtime) {
             FINISHED_CHANNEL_ID
         } else {
             RUNNING_CHANNEL_ID
         }
         return when (state.notificationMode) {
-            NotificationMode.Consolidated -> buildConsolidatedNotification(state, channelId)
+            NotificationMode.Consolidated -> buildConsolidatedNotification(
+                state = state,
+                displayTimer = displayTimer,
+                channelId = channelId,
+                shouldLaunchFinishedPage = shouldLaunchFinishedPage,
+            )
             NotificationMode.Individual -> {
                 val primary = primaryTimer(state)
                 val primaryChannelId = if (primary.status == TimerStatus.Finished || primary.status == TimerStatus.Overtime) {
@@ -44,7 +51,7 @@ class TimerNotificationManager(
                 } else {
                     RUNNING_CHANNEL_ID
                 }
-                buildIndividualNotification(primary, primaryChannelId)
+                buildIndividualNotification(primary, primaryChannelId, shouldLaunchFinishedPage)
             }
         }
     }
@@ -58,11 +65,16 @@ class TimerNotificationManager(
 
         when (state.notificationMode) {
             NotificationMode.Consolidated -> {
-                val channelId = if (state.timers.any { it.status == TimerStatus.Finished || it.status == TimerStatus.Overtime })
-                    FINISHED_CHANNEL_ID else RUNNING_CHANNEL_ID
+                val displayTimer = notificationDisplayTimer(state)
+                val channelId = if (displayTimer.status == TimerStatus.Finished || displayTimer.status == TimerStatus.Overtime) {
+                    FINISHED_CHANNEL_ID
+                } else {
+                    RUNNING_CHANNEL_ID
+                }
+                val shouldLaunchFinishedPage = FinishedAlertRequirementResolver.resolve(context, state).shouldUseFinishedPage
                 notificationManager.notify(
                     NOTIFICATION_ID,
-                    buildConsolidatedNotification(state, channelId),
+                    buildConsolidatedNotification(state, displayTimer, channelId, shouldLaunchFinishedPage),
                 )
             }
             NotificationMode.Individual -> {
@@ -75,9 +87,10 @@ class TimerNotificationManager(
                 } else {
                     RUNNING_CHANNEL_ID
                 }
+                val shouldLaunchFinishedPage = FinishedAlertRequirementResolver.resolve(context, state).shouldUseFinishedPage
                 notificationManager.notify(
                     NOTIFICATION_ID,
-                    buildIndividualNotification(primary, activeChannelId),
+                    buildIndividualNotification(primary, activeChannelId, shouldLaunchFinishedPage),
                 )
                 notificationManager.cancel(INDIVIDUAL_BASE + primary.id)
 
@@ -92,7 +105,7 @@ class TimerNotificationManager(
                         }
                         notificationManager.notify(
                             INDIVIDUAL_BASE + timer.id,
-                            buildIndividualNotification(timer, channelId),
+                            buildIndividualNotification(timer, channelId, shouldLaunchFinishedPage),
                         )
                     }
                 state.timers.filter { it.status == TimerStatus.Idle }.forEach { timer ->
@@ -112,8 +125,12 @@ class TimerNotificationManager(
         }
     }
 
-    private fun buildConsolidatedNotification(state: AppState, channelId: String): Notification {
-        val activeTimer = state.activeTimer
+    private fun buildConsolidatedNotification(
+        state: AppState,
+        displayTimer: TimerInstance,
+        channelId: String,
+        shouldLaunchFinishedPage: Boolean,
+    ): Notification {
         val runningCount = state.timers.count {
             it.status == TimerStatus.Running ||
                 it.status == TimerStatus.Paused ||
@@ -121,38 +138,38 @@ class TimerNotificationManager(
                 it.status == TimerStatus.Finished
         }
         val timerLabel = if (runningCount > 1) {
-            val name = activeTimer.activeTimerName.ifBlank { "Timer ${state.activeTimerIndex + 1}" }
-            "$name — ${state.activeTimerIndex + 1}/$runningCount"
+            val name = displayTimer.activeTimerName.ifBlank { "Timer ${displayTimer.id + 1}" }
+            "$name — ${displayTimer.id + 1}/$runningCount"
         } else {
-            activeTimer.activeTimerName.ifBlank { context.getString(R.string.notification_title) }
+            displayTimer.activeTimerName.ifBlank { context.getString(R.string.notification_title) }
         }
 
-        val consolidatedBaseText = contentTextForTimer(activeTimer)
-        val consolidatedContentText = if (activeTimer.status == TimerStatus.Running && activeTimer.settings.showEndTimeEnabled) {
-            val endTime = activeTimer.targetEndTimeMillis
-                ?: (System.currentTimeMillis() + activeTimer.remainingMillis)
-            consolidatedBaseText + formatEndTimeSuffix(endTime, activeTimer.settings.showEndTimeSecondsEnabled)
+        val consolidatedBaseText = contentTextForTimer(displayTimer)
+        val consolidatedContentText = if (displayTimer.status == TimerStatus.Running && displayTimer.settings.showEndTimeEnabled) {
+            val endTime = displayTimer.targetEndTimeMillis
+                ?: (System.currentTimeMillis() + displayTimer.remainingMillis)
+            consolidatedBaseText + formatEndTimeSuffix(endTime, displayTimer.settings.showEndTimeSecondsEnabled)
         } else consolidatedBaseText
 
         val builder = Notification.Builder(context, channelId)
             .setContentTitle(timerLabel)
             .setContentText(consolidatedContentText)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setOngoing(activeTimer.status != TimerStatus.Idle)
+            .setOngoing(displayTimer.status != TimerStatus.Idle)
             .setOnlyAlertOnce(true)
             .setAutoCancel(false)
-            .setContentIntent(contentPendingIntent(state.activeTimerIndex))
+            .setContentIntent(contentPendingIntent(displayTimer.id))
 
-        when (activeTimer.status) {
+        when (displayTimer.status) {
             TimerStatus.Running -> {
                 builder
                     .addAction(Notification.Action.Builder(
                         null, context.getString(R.string.pause),
-                        servicePendingIntent(TimerService.ACTION_PAUSE, state.activeTimerIndex),
+                        servicePendingIntent(TimerService.ACTION_PAUSE, displayTimer.id),
                     ).build())
                     .addAction(Notification.Action.Builder(
                         null, context.getString(R.string.reset),
-                        servicePendingIntent(TimerService.ACTION_RESET, state.activeTimerIndex),
+                        servicePendingIntent(TimerService.ACTION_RESET, displayTimer.id),
                     ).build())
                 if (runningCount > 1) {
                     builder.addAction(Notification.Action.Builder(
@@ -165,11 +182,11 @@ class TimerNotificationManager(
                 builder
                     .addAction(Notification.Action.Builder(
                         null, context.getString(R.string.resume),
-                        servicePendingIntent(TimerService.ACTION_RESUME, state.activeTimerIndex),
+                        servicePendingIntent(TimerService.ACTION_RESUME, displayTimer.id),
                     ).build())
                     .addAction(Notification.Action.Builder(
                         null, context.getString(R.string.reset),
-                        servicePendingIntent(TimerService.ACTION_RESET, state.activeTimerIndex),
+                        servicePendingIntent(TimerService.ACTION_RESET, displayTimer.id),
                     ).build())
                 if (runningCount > 1) {
                     builder.addAction(Notification.Action.Builder(
@@ -182,11 +199,13 @@ class TimerNotificationManager(
             TimerStatus.Finished -> {
                 builder
                     .setCategory(Notification.CATEGORY_ALARM)
-                    .setFullScreenIntent(fullScreenPendingIntent(), true)
                     .addAction(Notification.Action.Builder(
                         null, context.getString(R.string.dismiss),
-                        servicePendingIntent(TimerService.ACTION_DISMISS_FINISHED, state.activeTimerIndex),
+                        servicePendingIntent(TimerService.ACTION_DISMISS_FINISHED, displayTimer.id),
                     ).build())
+                if (shouldLaunchFinishedPage) {
+                    builder.setFullScreenIntent(fullScreenPendingIntent(displayTimer.id), true)
+                }
                 if (runningCount > 1) {
                     builder.addAction(Notification.Action.Builder(
                         null, context.getString(R.string.notification_next_timer),
@@ -200,7 +219,11 @@ class TimerNotificationManager(
         return builder.build()
     }
 
-    private fun buildIndividualNotification(timer: TimerInstance, channelId: String): Notification {
+    private fun buildIndividualNotification(
+        timer: TimerInstance,
+        channelId: String,
+        shouldLaunchFinishedPage: Boolean,
+    ): Notification {
         val title = timer.activeTimerName.ifBlank { context.getString(R.string.notification_title) }
         val builder = Notification.Builder(context, channelId)
             .setContentTitle(title)
@@ -247,19 +270,21 @@ class TimerNotificationManager(
                 ).build())
             TimerStatus.Overtime -> builder
                 .setCategory(Notification.CATEGORY_ALARM)
-                .setFullScreenIntent(fullScreenPendingIntent(), true)
                 .addAction(Notification.Action.Builder(
                     null, context.getString(R.string.dismiss),
                     servicePendingIntent(TimerService.ACTION_DISMISS_FINISHED, timer.id),
                 ).build())
             TimerStatus.Finished -> builder
                 .setCategory(Notification.CATEGORY_ALARM)
-                .setFullScreenIntent(fullScreenPendingIntent(), true)
                 .addAction(Notification.Action.Builder(
                     null, context.getString(R.string.dismiss),
                     servicePendingIntent(TimerService.ACTION_DISMISS_FINISHED, timer.id),
                 ).build())
             TimerStatus.Idle -> builder.setOngoing(false)
+        }
+
+        if (shouldLaunchFinishedPage && (timer.status == TimerStatus.Finished || timer.status == TimerStatus.Overtime)) {
+            builder.setFullScreenIntent(fullScreenPendingIntent(timer.id), true)
         }
 
         return builder.build()
@@ -341,33 +366,43 @@ class TimerNotificationManager(
         return context.getString(R.string.notification_end_time_suffix, time.format(formatter))
     }
 
-    private fun fullScreenPendingIntent(): PendingIntent {
+    private fun fullScreenPendingIntent(timerIndex: Int): PendingIntent {
         val intent = Intent(context, TimerFinishedActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(EXTRA_TARGET_TIMER_INDEX, timerIndex)
         return PendingIntent.getActivity(
-            context, 9999, intent,
+            context, 9999 + timerIndex, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
 
     private fun primaryTimer(state: AppState): TimerInstance =
-        state.timers.firstOrNull { it.status == TimerStatus.Running }
+        state.timers.firstOrNull { it.status == TimerStatus.Overtime || it.status == TimerStatus.Finished }
+            ?: state.timers.firstOrNull { it.status == TimerStatus.Running }
             ?: state.timers.firstOrNull { it.status == TimerStatus.Overtime }
             ?: state.timers.firstOrNull { it.status == TimerStatus.Paused }
             ?: state.timers.firstOrNull { it.status == TimerStatus.Finished }
             ?: state.activeTimer
 
-    fun postAlarmTriggerNotification(timer: TimerInstance) {
+    private fun notificationDisplayTimer(state: AppState): TimerInstance =
+        state.timers.firstOrNull { it.status == TimerStatus.Overtime || it.status == TimerStatus.Finished }
+            ?: state.activeTimer
+
+    fun postAlarmTriggerNotification(timer: TimerInstance, shouldLaunchFinishedPage: Boolean = false) {
         val title = timer.activeTimerName.ifBlank { context.getString(R.string.notification_finished_title) }
-        val notification = Notification.Builder(context, FINISHED_CHANNEL_ID)
+        val builder = Notification.Builder(context, FINISHED_CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(context.getString(R.string.notification_finished))
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setCategory(Notification.CATEGORY_ALARM)
-            .setFullScreenIntent(fullScreenPendingIntent(), true)
+            .setContentIntent(contentPendingIntent(timer.id))
             .setAutoCancel(true)
-            .build()
-        notificationManager.notify(ALARM_TRIGGER_BASE + timer.id, notification)
+        if (shouldLaunchFinishedPage) {
+            // A fresh notify() reliably fires the full-screen intent; the foreground-service
+            // notification update alone is not guaranteed to trigger it on all Android versions.
+            builder.setFullScreenIntent(fullScreenPendingIntent(timer.id), true)
+        }
+        notificationManager.notify(ALARM_TRIGGER_BASE + timer.id, builder.build())
     }
 
     fun cancelAlarmTriggerNotification(timerId: Int) {
