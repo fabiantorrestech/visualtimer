@@ -367,11 +367,10 @@ class TimerNotificationManager(
     }
 
     private fun fullScreenPendingIntent(timerIndex: Int): PendingIntent {
-        val intent = Intent(context, TimerFinishedActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            .putExtra(EXTRA_TARGET_TIMER_INDEX, timerIndex)
         return PendingIntent.getActivity(
-            context, 9999 + timerIndex, intent,
+            context,
+            9999 + timerIndex,
+            TimerFinishedActivity.createLaunchIntent(context, timerIndex),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }

@@ -1,6 +1,7 @@
 package com.fabiantorrestech.visualtimerplus.ui.screen
 
 import android.app.KeyguardManager
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
@@ -96,7 +97,7 @@ class TimerFinishedActivity : ComponentActivity() {
     private lateinit var controller: TimerController
     private val activityCreatedAtMillis = System.currentTimeMillis()
     private var launchedMainActivity = false
-    private var launchedTargetTimerIndex = -1
+    private var launchedTargetTimerIndex by mutableStateOf(-1)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -110,7 +111,7 @@ class TimerFinishedActivity : ComponentActivity() {
         }
 
         controller = TimerController(applicationContext)
-        launchedTargetTimerIndex = intent?.getIntExtra(TimerNotificationManager.EXTRA_TARGET_TIMER_INDEX, -1) ?: -1
+        applyLaunchIntent(intent)
 
         setContent {
             val appState by TimerRepository.state.collectAsStateWithLifecycle()
@@ -133,6 +134,11 @@ class TimerFinishedActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        applyLaunchIntent(intent)
     }
 
     override fun onStart() {
@@ -188,6 +194,27 @@ class TimerFinishedActivity : ComponentActivity() {
         }
         startActivity(intent)
     }
+
+    private fun applyLaunchIntent(intent: Intent?) {
+        setIntent(intent)
+        launchedTargetTimerIndex = intent
+            ?.getIntExtra(TimerNotificationManager.EXTRA_TARGET_TIMER_INDEX, -1)
+            ?: -1
+    }
+
+    companion object {
+        fun createLaunchIntent(context: Context, timerIndex: Int): Intent = Intent(
+            context,
+            TimerFinishedActivity::class.java,
+        ).apply {
+            putExtra(TimerNotificationManager.EXTRA_TARGET_TIMER_INDEX, timerIndex)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP,
+            )
+        }
+    }
 }
 
 @Composable
@@ -215,6 +242,10 @@ private fun TimerFinishedScreen(
         ?: return
 
     var focusedTimerId by rememberSaveable { mutableStateOf<Int?>(launchTargetTimerIndex.takeIf { it >= 0 }) }
+    LaunchedEffect(launchTargetTimerIndex, allEligible) {
+        val targetTimer = allEligible.find { it.id == launchTargetTimerIndex } ?: return@LaunchedEffect
+        focusedTimerId = targetTimer.id
+    }
     val focusedTimer = allEligible.find { it.id == focusedTimerId } ?: defaultFocused
 
     val alsoFinishedList = overtimeTimers

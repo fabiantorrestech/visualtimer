@@ -16,6 +16,7 @@ import com.fabiantorrestech.visualtimerplus.db.TimerLogEntity
 import com.fabiantorrestech.visualtimerplus.notification.TimerNotificationManager
 import com.fabiantorrestech.visualtimerplus.overlay.TimerOverlayManager
 import com.fabiantorrestech.visualtimerplus.schedule.ScheduledTimerManager
+import com.fabiantorrestech.visualtimerplus.ui.screen.TimerFinishedActivity
 import com.fabiantorrestech.visualtimerplus.util.Haptics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -393,6 +394,9 @@ class TimerService : Service() {
             timer,
             shouldLaunchFinishedPage = alertRequirements.shouldUseFinishedPage,
         )
+        if (alertRequirements.shouldUseFinishedPage && TimerRepository.isAppForeground) {
+            startActivity(TimerFinishedActivity.createLaunchIntent(this, index))
+        }
 
         if (!TimerRepository.isAppForeground) {
             promoteToForeground()
