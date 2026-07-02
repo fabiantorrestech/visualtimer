@@ -122,6 +122,10 @@ class TimerService : Service() {
             ACTION_RESET -> resetTimer(resolvedIndex)
             ACTION_DISMISS_FINISHED -> dismissFinished(resolvedIndex)
             ACTION_RESTART -> restartTimer(resolvedIndex)
+            ACTION_ADJUST_RUNNING -> {
+                val deltaMillis = intent.getLongExtra(EXTRA_ADJUST_DELTA_MILLIS, 0L)
+                adjustRunningTimer(resolvedIndex, deltaMillis)
+            }
             ACTION_ADJUST_OVERTIME -> {
                 val deltaMillis = intent.getLongExtra(EXTRA_ADJUST_DELTA_MILLIS, 0L)
                 addTimeDuringOvertime(resolvedIndex, deltaMillis)
@@ -439,6 +443,35 @@ class TimerService : Service() {
         scheduleTick()
     }
 
+    private fun adjustRunningTimer(index: Int, deltaMillis: Long) {
+        val timer = TimerRepository.getTimer(index)
+        if (timer.status != TimerStatus.Running) return
+
+        val now = System.currentTimeMillis()
+        val currentRemaining = timer.targetEndTimeMillis
+            ?.let { clampDuration(it - now) }
+            ?: timer.remainingMillis
+        val updatedRemaining = clampDuration(currentRemaining + deltaMillis)
+            .coerceAtMost(DRAG_MAX_MILLIS)
+        val appliedDelta = updatedRemaining - currentRemaining
+        val totalAdjustment = timer.totalAdjustmentMillis + appliedDelta
+
+        TimerRepository.updateTimer(index) { t ->
+            t.copy(
+                status = TimerStatus.Running,
+                selectedDurationMillis = (t.originalDurationMillis + totalAdjustment).coerceAtLeast(0L),
+                remainingMillis = updatedRemaining,
+                targetEndTimeMillis = now + updatedRemaining,
+                pausedRemainingMillis = null,
+                totalAdjustmentMillis = totalAdjustment,
+            )
+        }
+
+        promoteToForeground()
+        notificationManager.updateNotification(TimerRepository.getState())
+        scheduleTick()
+    }
+
     private fun completeLogEntry(index: Int) {
         val timer = TimerRepository.getTimer(index)
         val logId = timer.activeLogEntryId
@@ -619,6 +652,7 @@ class TimerService : Service() {
         const val ACTION_RESET = "com.fabiantorrestech.visualtimerplus.action.RESET"
         const val ACTION_DISMISS_FINISHED = "com.fabiantorrestech.visualtimerplus.action.DISMISS_FINISHED"
         const val ACTION_RESTART = "com.fabiantorrestech.visualtimerplus.action.RESTART"
+        const val ACTION_ADJUST_RUNNING = "com.fabiantorrestech.visualtimerplus.action.ADJUST_RUNNING"
         const val ACTION_ADJUST_OVERTIME = "com.fabiantorrestech.visualtimerplus.action.ADJUST_OVERTIME"
         const val EXTRA_TIMER_INDEX = "timer_index"
         const val EXTRA_ADJUST_DELTA_MILLIS = "adjust_delta_millis"

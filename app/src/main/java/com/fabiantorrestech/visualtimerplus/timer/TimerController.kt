@@ -499,24 +499,19 @@ class TimerController(context: Context) {
                     }
                     return
                 }
+                if (timer.status == TimerStatus.Running) {
+                    startService(
+                        TimerService.ACTION_ADJUST_RUNNING,
+                        foreground = true,
+                        timerIndex = idx,
+                        adjustDeltaMillis = action.deltaMillis,
+                    )
+                    return
+                }
 
                 TimerRepository.updateTimer(idx) { t ->
                     when (t.status) {
-                        TimerStatus.Running -> {
-                            val currentRemaining = t.targetEndTimeMillis
-                                ?.let { clampDuration(it - System.currentTimeMillis()) }
-                                ?: t.remainingMillis
-                            val updated = clampDuration(currentRemaining + action.deltaMillis).coerceAtMost(DRAG_MAX_MILLIS)
-                            val appliedDelta = updated - currentRemaining
-                            val totalAdjustment = t.totalAdjustmentMillis + appliedDelta
-                            t.copy(
-                                selectedDurationMillis = (t.originalDurationMillis + totalAdjustment).coerceAtLeast(0L),
-                                remainingMillis = updated,
-                                targetEndTimeMillis = System.currentTimeMillis() + updated,
-                                pausedRemainingMillis = null,
-                                totalAdjustmentMillis = totalAdjustment,
-                            )
-                        }
+                        TimerStatus.Running -> t
                         TimerStatus.Paused -> {
                             val currentRemaining = t.pausedRemainingMillis ?: t.remainingMillis
                             val updated = clampDuration(currentRemaining + action.deltaMillis).coerceAtMost(DRAG_MAX_MILLIS)

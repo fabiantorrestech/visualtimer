@@ -60,16 +60,16 @@ fun QuickTimerDial(
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
+                .pointerInput(clockwiseModeEnabled) {
                     val center = Offset(size.width / 2f, size.height / 2f)
                     var lastAngle = 0f
                     detectDragGestures(
                         onDragStart = { offset ->
-                            lastAngle = angleFromCenter(offset, center)
+                            lastAngle = directionalAngleFromCenter(offset, center, clockwiseModeEnabled)
                         },
                         onDrag = { change, _ ->
                             change.consume()
-                            val newAngle = angleFromCenter(change.position, center)
+                            val newAngle = directionalAngleFromCenter(change.position, center, clockwiseModeEnabled)
                             var delta = newAngle - lastAngle
                             if (delta > 180f) delta -= 360f
                             if (delta < -180f) delta += 360f
@@ -168,10 +168,11 @@ fun QuickTimerDial(
                 else -> totalAngle
             }
             if (sweepAngle > 0.5f) {
+                val signedSweepAngle = if (clockwiseModeEnabled) sweepAngle else -sweepAngle
                 drawArc(
                     color = primaryColor,
                     startAngle = -90f,
-                    sweepAngle = sweepAngle,
+                    sweepAngle = signedSweepAngle,
                     useCenter = false,
                     topLeft = arcTopLeft,
                     size = arcSize,
@@ -207,10 +208,11 @@ fun QuickTimerDial(
                 )
                 val secondSweep = ((totalAngle - 360f) / 360f).coerceIn(0f, 1f) * 360f
                 if (secondSweep > 0.5f) {
+                    val signedSecondSweep = if (clockwiseModeEnabled) secondSweep else -secondSweep
                     drawArc(
                         color = primaryColor,
                         startAngle = -90f,
-                        sweepAngle = secondSweep,
+                        sweepAngle = signedSecondSweep,
                         useCenter = false,
                         topLeft = innerTopLeft,
                         size = innerSize,
@@ -248,4 +250,9 @@ private fun angleFromCenter(offset: Offset, center: Offset): Float {
     if (angle < 0f) angle += 360f
     if (angle >= 360f) angle -= 360f
     return angle
+}
+
+private fun directionalAngleFromCenter(offset: Offset, center: Offset, clockwise: Boolean): Float {
+    val angle = angleFromCenter(offset, center)
+    return if (clockwise) angle else (360f - angle) % 360f
 }

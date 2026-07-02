@@ -100,8 +100,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -1794,31 +1796,29 @@ private fun HeroTimerCard(
     } else {
         effectiveDisplayMillis.formatClockTime()
     }
+    var previousStatus by remember(timer.id) { mutableStateOf(timer.status) }
+    var feedbackIcon by remember(timer.id) { mutableStateOf<PlaybackFeedbackIcon?>(null) }
+    var feedbackVisible by remember(timer.id) { mutableStateOf(false) }
+
+    LaunchedEffect(timer.status) {
+        val icon = when {
+            previousStatus == TimerStatus.Running && timer.status == TimerStatus.Paused -> PlaybackFeedbackIcon.Pause
+            timer.status == TimerStatus.Running &&
+                (previousStatus == TimerStatus.Idle || previousStatus == TimerStatus.Paused) -> PlaybackFeedbackIcon.Play
+            else -> null
+        }
+        previousStatus = timer.status
+        if (icon != null) {
+            feedbackIcon = icon
+            feedbackVisible = true
+            delay(2_000L)
+            feedbackVisible = false
+        }
+    }
 
     Box(
         contentAlignment = Alignment.Center,
-        modifier = modifier.pointerInput(timer.status) {
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false)
-                val startPosition = down.position
-                var movedBeyondSlop = false
-
-                val longPressed = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Final)
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
-                        if ((change.position - startPosition).getDistance() > viewConfiguration.touchSlop) {
-                            movedBeyondSlop = true
-                            break
-                        }
-                    }
-                } == null
-
-                if (movedBeyondSlop) return@awaitEachGesture
-                if (longPressed) onCenterLongPress() else onCenterTap()
-            }
-        },
+        modifier = modifier,
     ) {
         VisualTimerCanvas(
             modifier = Modifier.fillMaxSize(),
@@ -1848,6 +1848,10 @@ private fun HeroTimerCard(
                     ),
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.combinedClickable(
+                        onClick = onCenterTap,
+                        onLongClick = onCenterLongPress,
+                    ).padding(horizontal = 8.dp, vertical = 4.dp),
                     maxLines = 1,
                     softWrap = false,
                 )
@@ -1859,6 +1863,94 @@ private fun HeroTimerCard(
                     modifier = Modifier.alpha(displayAlpha),
                     maxLines = 1,
                     softWrap = false,
+                )
+            }
+        }
+        AnimatedVisibility(
+            visible = feedbackVisible && feedbackIcon != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
+            feedbackIcon?.let { icon ->
+                PlaybackFeedbackOverlay(
+                    icon = icon,
+                    onClick = onCenterTap,
+                )
+            }
+        }
+    }
+}
+
+private enum class PlaybackFeedbackIcon { Play, Pause }
+
+@Composable
+private fun PlaybackFeedbackOverlay(
+    icon: PlaybackFeedbackIcon,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val iconColor = MaterialTheme.colorScheme.onSurface
+    val shadowColor = Color.Black.copy(alpha = 0.58f)
+    Canvas(
+        modifier = modifier
+            .size(112.dp)
+            .combinedClickable(onClick = onClick)
+            .padding(24.dp),
+    ) {
+        val shadowDistance = size.minDimension * 0.045f
+        val shadowOffsets = listOf(
+            Offset(-shadowDistance, -shadowDistance),
+            Offset(0f, -shadowDistance),
+            Offset(shadowDistance, -shadowDistance),
+            Offset(-shadowDistance, 0f),
+            Offset(shadowDistance, 0f),
+            Offset(-shadowDistance, shadowDistance),
+            Offset(0f, shadowDistance),
+            Offset(shadowDistance, shadowDistance),
+        )
+
+        when (icon) {
+            PlaybackFeedbackIcon.Play -> {
+                fun playPath(offset: Offset = Offset.Zero): Path = Path().apply {
+                    moveTo(size.width * 0.34f + offset.x, size.height * 0.20f + offset.y)
+                    lineTo(size.width * 0.34f + offset.x, size.height * 0.80f + offset.y)
+                    lineTo(size.width * 0.80f + offset.x, size.height * 0.50f + offset.y)
+                    close()
+                }
+                shadowOffsets.forEach { offset ->
+                    drawPath(path = playPath(offset), color = shadowColor)
+                }
+                drawPath(path = playPath(), color = iconColor)
+            }
+            PlaybackFeedbackIcon.Pause -> {
+                val barWidth = size.width * 0.18f
+                val gap = size.width * 0.16f
+                val barHeight = size.height * 0.62f
+                val left = (size.width - barWidth * 2f - gap) / 2f
+                val top = (size.height - barHeight) / 2f
+
+                shadowOffsets.forEach { offset ->
+                    drawRect(
+                        color = shadowColor,
+                        topLeft = Offset(left + offset.x, top + offset.y),
+                        size = Size(barWidth, barHeight),
+                    )
+                    drawRect(
+                        color = shadowColor,
+                        topLeft = Offset(left + barWidth + gap + offset.x, top + offset.y),
+                        size = Size(barWidth, barHeight),
+                    )
+                }
+                drawRect(
+                    color = iconColor,
+                    topLeft = Offset(left, top),
+                    size = Size(barWidth, barHeight),
+                )
+                drawRect(
+                    color = iconColor,
+                    topLeft = Offset(left + barWidth + gap, top),
+                    size = Size(barWidth, barHeight),
                 )
             }
         }

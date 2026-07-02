@@ -137,29 +137,27 @@ fun VisualTimerCanvas(
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val startPos = down.position
 
-                // If touch starts inside the circle, claim winding immediately.
-                // Outside the circle, use direction-based intent detection so horizontal
-                // swipes on the margin still reach the pager.
+                // Taps should stay taps. Only claim winding after movement shows drag intent.
+                // Outside the circle, keep direction-based detection so horizontal swipes
+                // on the margin still reach the pager.
                 val circleCenter = Offset(size.width / 2f, size.height / 2f)
                 val circleRadius = min(size.width, size.height) / 2f
                 val touchedInsideCircle = (down.position - circleCenter).getDistance() <= circleRadius
 
-                var claimedForWinding = touchedInsideCircle
-                if (!touchedInsideCircle) {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed || change.isConsumed) break
+                var claimedForWinding = false
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed || change.isConsumed) break
 
-                        val dragOffset = change.position - startPos
-                        if (dragOffset.getDistance() > viewConfiguration.touchSlop) {
-                            val isHorizontalSwipe = kotlin.math.abs(dragOffset.x) > kotlin.math.abs(dragOffset.y) * 2f
-                            if (!isHorizontalSwipe) {
-                                change.consume()
-                                claimedForWinding = true
-                            }
-                            break
+                    val dragOffset = change.position - startPos
+                    if (dragOffset.getDistance() > viewConfiguration.touchSlop) {
+                        val isHorizontalSwipe = kotlin.math.abs(dragOffset.x) > kotlin.math.abs(dragOffset.y) * 2f
+                        if (touchedInsideCircle || !isHorizontalSwipe) {
+                            change.consume()
+                            claimedForWinding = true
                         }
+                        break
                     }
                 }
                 if (!claimedForWinding) return@awaitEachGesture
